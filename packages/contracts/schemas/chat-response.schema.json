@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ChatResponse",
+  "type": "object",
+  "required": [
+    "answer",
+    "provider_used",
+    "trace_id",
+    "evidence",
+    "debug_steps",
+    "conversation_id",
+    "warnings"
+  ],
+  "properties": {
+    "answer": {
+      "type": "string"
+    },
+    "provider_used": {
+      "type": "string"
+    },
+    "trace_id": {
+      "type": "string"
+    }
+  }
+}
+

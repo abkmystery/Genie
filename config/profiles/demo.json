@@ -1,0 +1,22 @@
+{
+  "id": "demo",
+  "display_name": "Demo",
+  "description": "Runs a demo provider with a bundled/remote demo credential file (or offline fallback).",
+  "provider_mode": "demo",
+  "transport": "http",
+  "api_style": "openai_compatible",
+  "backend_base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+  "demo_source_order": ["bundled_file", "remote_file", "offline_mock"],
+  "remote_demo_file_url": "",
+  "remote_demo_file_format": "json",
+  "default_model": "gemma-4-26b-a4b-it",
+  "model_name": "gemma-4-26b-a4b-it",
+  "timeout_ms": 60000,
+  "capabilities": {
+    "supports_screen_input": true,
+    "supports_stt": true,
+    "supports_tts": true
+  },
+  "credentials_required": false,
+  "credentials_stored_locally": false
+}

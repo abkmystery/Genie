@@ -1,0 +1,71 @@
+{
+  "name": "@genie/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Genie desktop shell for Phase 1 Screen Companion",
+  "author": "Ahmed Bin Khalid",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"npm run dev:electron:watch\" \"npm run dev:renderer\" \"npm run dev:electron\"",
+    "dev:renderer": "vite",
+    "dev:electron:watch": "tsc -p tsconfig.electron.json --watch",
+    "dev:electron": "wait-on tcp:5173 file:dist-electron/main.js && electron .",
+    "build": "tsc -p tsconfig.electron.json && vite build",
+    "package": "npm run build && electron-builder",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit"
+  },
+  "dependencies": {
+    "@genie/contracts": "0.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^22.15.19",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@vitejs/plugin-react": "^4.4.1",
+    "concurrently": "^9.2.1",
+    "electron": "35.1.5",
+    "electron-builder": "^25.1.8",
+    "jsdom": "^26.1.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vitest": "^3.1.2",
+    "wait-on": "^8.0.3"
+  },
+  "build": {
+    "appId": "com.genie.desktop",
+    "productName": "Genie",
+    "directories": {
+      "output": "release"
+    },
+    "extraResources": [
+      {
+        "from": "../../config/profiles",
+        "to": "config/profiles"
+      },
+      {
+        "from": "../../resources/private",
+        "to": "private"
+      },
+      {
+        "from": "../../resources/backend/genie-local-api.exe",
+        "to": "backend/genie-local-api.exe"
+      }
+    ],
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "publisherName": "Ahmed Bin Khalid",
+      "target": [
+        "nsis"
+      ],
+      "signAndEditExecutable": false
+    }
+  }
+}

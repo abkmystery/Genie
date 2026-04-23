@@ -1,0 +1,17 @@
+{
+  "id": "local",
+  "display_name": "Local Model",
+  "description": "Routes requests to a user-managed local endpoint running on the same machine or LAN.",
+  "transport": "http",
+  "api_style": "openai_compatible",
+  "backend_base_url": "http://127.0.0.1:8766/v1",
+  "model_name": "google/gemma-4-E4B-it",
+  "timeout_ms": 45000,
+  "capabilities": {
+    "supports_screen_input": true,
+    "supports_stt": true,
+    "supports_tts": false
+  },
+  "credentials_required": false,
+  "credentials_stored_locally": true
+}

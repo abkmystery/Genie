@@ -1,0 +1,17 @@
+{
+  "id": "custom",
+  "display_name": "Custom Endpoint",
+  "description": "User-supplied model endpoint and optional token. Values are configured in Settings rather than hardcoded here.",
+  "transport": "http",
+  "api_style": "openai_compatible",
+  "backend_base_url": "https://example.invalid/api",
+  "model_name": "gemma-4-26b-a4b-it",
+  "timeout_ms": 45000,
+  "capabilities": {
+    "supports_screen_input": true,
+    "supports_stt": false,
+    "supports_tts": false
+  },
+  "credentials_required": true,
+  "credentials_stored_locally": true
+}

@@ -1,0 +1,11 @@
+{
+  "provider_type": "google_gemini_openai_compatible",
+  "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+  "api_key": "PUT_KEY_HERE",
+  "model": "gemma-4-26b-a4b-it",
+  "timeout_ms": 60000,
+  "supports_images": true,
+  "supports_audio_input": false,
+  "notes": "demo mode provider config (example template). You may optionally obfuscate api_key via api_key_b64 or api_key='b64:...'."
+}
+

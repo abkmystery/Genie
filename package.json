@@ -1,0 +1,32 @@
+{
+  "name": "genie",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Genie desktop AI companion",
+  "workspaces": [
+    "apps/desktop",
+    "packages/contracts"
+  ],
+  "scripts": {
+    "dev:desktop": "npm run dev --workspace @genie/desktop",
+    "build:desktop": "npm run build --workspace @genie/desktop",
+    "test:desktop": "npm run test --workspace @genie/desktop",
+    "typecheck:desktop": "npm run typecheck --workspace @genie/desktop",
+    "build:contracts": "npm run build --workspace @genie/contracts",
+    "build:backend": "powershell -ExecutionPolicy Bypass -File scripts/build-backend.ps1",
+    "test:backend": "py -3.11 -m pytest services/local-api/tests && py -3.11 -m pytest services/demo-gateway/tests",
+    "dev:api": "py -3.11 -m uvicorn app.main:app --app-dir services/local-api --reload --host 127.0.0.1 --port 8765",
+    "dev:gateway": "py -3.11 -m uvicorn app.main:app --app-dir services/demo-gateway --reload --host 127.0.0.1 --port 8788",
+    "setup:local-gemma": "powershell -ExecutionPolicy Bypass -File scripts/setup-local-gemma4.ps1",
+    "dev:local-gemma": "powershell -ExecutionPolicy Bypass -File scripts/run-local-gemma.ps1",
+    "test": "npm run test:desktop && npm run test:backend",
+    "build": "npm run build:contracts && npm run build:desktop",
+    "build:public": "npm run build:backend && npm run build",
+    "build:demo": "powershell -ExecutionPolicy Bypass -Command \"if (Test-Path resources/private/demo-provider.json) { Write-Host 'demo-provider.json found; demo build will bundle it.' } else { Write-Warning 'demo-provider.json not found; Demo will use offline fallback.' }\"; npm run build:public",
+    "package:public": "powershell -ExecutionPolicy Bypass -File scripts/package-public.ps1",
+    "package:demo": "powershell -ExecutionPolicy Bypass -File scripts/package-demo.ps1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
