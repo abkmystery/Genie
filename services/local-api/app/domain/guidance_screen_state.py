@@ -70,7 +70,22 @@ class GuidanceScreenStateAnalyzer:
             for index, step in enumerate(steps)
         ]
         scored.sort(key=lambda item: (-item[0], abs(item[1] - current_step_index), item[1]))
-        return [index for _, index in scored]
+        return [index for _, index in scored[:4]]
+
+    def should_force_replan(
+        self,
+        *,
+        screen_context: ScreenContext,
+        current_step_index: int,
+        steps: Sequence[GuidedTaskStep],
+    ) -> bool:
+        if not steps:
+            return False
+        screen_terms = terms(f"{screen_context.summary} {screen_context.text}")
+        if not screen_terms:
+            return True
+        best_overlap = max(self._step_overlap_signal(step=step, screen_terms=screen_terms) for step in steps)
+        return best_overlap <= 0
 
     def should_refresh_grounding(
         self,
@@ -99,8 +114,17 @@ class GuidanceScreenStateAnalyzer:
         return bool((target_terms and not (target_terms & current_terms)) or (label_terms and not (label_terms & current_terms)))
 
     def _step_relevance_score(self, *, step: GuidedTaskStep, screen_terms: set[str], current_step_index: int) -> float:
-        step_terms = terms(f"{step.target_description} {step.instruction_text} {step.completion_hint}")
-        overlap = len(step_terms & screen_terms)
-        position_bias = max(0.0, 1.0 - (abs(step.order_index - current_step_index) * 0.18))
-        current_bias = 0.35 if step.order_index == current_step_index else 0.0
-        return overlap + position_bias + current_bias
+        target_overlap = len(terms(step.target_description) & screen_terms)
+        hint_overlap = len(terms(step.completion_hint) & screen_terms)
+        instruction_overlap = len(terms(step.instruction_text) & screen_terms)
+        position_bias = max(0.0, 0.9 - (abs(step.order_index - current_step_index) * 0.22))
+        current_bias = 0.25 if step.order_index == current_step_index else 0.0
+        forward_bias = 0.12 if step.order_index >= current_step_index else 0.0
+        return (target_overlap * 1.35) + (hint_overlap * 1.65) + (instruction_overlap * 0.75) + position_bias + current_bias + forward_bias
+
+    def _step_overlap_signal(self, *, step: GuidedTaskStep, screen_terms: set[str]) -> int:
+        return (
+            len(terms(step.target_description) & screen_terms)
+            + len(terms(step.completion_hint) & screen_terms)
+            + len(terms(step.instruction_text) & screen_terms)
+        )

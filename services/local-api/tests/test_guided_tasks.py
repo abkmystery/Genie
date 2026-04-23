@@ -650,6 +650,105 @@ def test_guided_observe_replans_when_visual_screen_changes_without_ocr(tmp_path:
     assert observed.overlay_target is not None
 
 
+def test_guided_observe_prefers_reanchoring_before_replan(tmp_path: Path):
+    trace = TraceService(SQLiteTraceLogger(Database(tmp_path / "guided-fast-reanchor.db")))
+    orchestrator = GuidanceOrchestrator(
+        session_manager=GuidedTaskSessionManager(),
+        planner=TaskPlanner(),
+        grounder=TargetGrounder(type("Registry", (), {"demo_resolver": None, "credential_store": type("Store", (), {"get": lambda self, provider_id: {}})()})()),
+        progress_detector=StepProgressDetector(),
+        recovery_policy=RecoveryPolicy(),
+        trace_logger=GuidedTaskTraceLogger(trace),
+    )
+
+    planner_calls: list[str] = []
+
+    async def _planner(**kwargs):
+        planner_calls.append(kwargs["screen_context"].text)
+        return GuidedTaskPlan(
+            title="Kaggle flow",
+            goal=kwargs["goal"],
+            estimated_steps=3,
+            steps=[
+                GuidedTaskStep(step_id="1", order_index=0, instruction_text="Open Kaggle", target_description="Kaggle", completion_hint="Kaggle is open", grounding_required=True),
+                GuidedTaskStep(step_id="2", order_index=1, instruction_text="Open Competitions", target_description="Competitions", completion_hint="Competitions is visible", grounding_required=True),
+                GuidedTaskStep(step_id="3", order_index=2, instruction_text="Filter by prize", target_description="Prize", completion_hint="Prize filter is visible", grounding_required=True),
+            ],
+        )
+
+    async def _ground(**kwargs):
+        step = kwargs["step"]
+        screen_text = kwargs["screen_context"].text.lower()
+        if step.step_id == "1" and "browser" in screen_text:
+            return GroundingResult(
+                success=True,
+                confidence=0.84,
+                bbox=OverlayTarget(x=120, y=88, width=110, height=28, target_label="Kaggle", render_style="arrow_pulse"),
+                target_label="Kaggle",
+                reason="Matched the Kaggle destination target on the current screen.",
+            )
+        if step.step_id == "2" and "competitions" in screen_text:
+            return GroundingResult(
+                success=True,
+                confidence=0.92,
+                bbox=OverlayTarget(x=220, y=120, width=120, height=30, target_label="Competitions", render_style="arrow_pulse"),
+                target_label="Competitions",
+                reason="Matched competitions on the current screen.",
+            )
+        return GroundingResult(
+            success=False,
+            confidence=0.0,
+            bbox=None,
+            target_label=None,
+            reason=f"Could not locate {step.target_description}.",
+            fallback_suggestion="Re-scan.",
+        )
+
+    orchestrator.planner.plan = _planner  # type: ignore[method-assign]
+    orchestrator.grounder.ground = _ground  # type: ignore[method-assign]
+    profile = ProviderConfig(
+        id="demo",
+        display_name="Demo",
+        description="Demo",
+        transport="mock",
+        backend_base_url="http://127.0.0.1",
+        model_name="stub",
+        capabilities=ProviderCapabilities(),
+    )
+
+    started = __import__("asyncio").run(
+        orchestrator.start(
+            goal="Guide me to Kaggle competitions",
+            conversation_id="conv-1",
+            screen_context=_screen_context(tmp_path, text="Browser home page"),
+            region_context=None,
+            evidence=[],
+            profile=profile,
+            provider=_StubPlannerProvider(),
+            max_steps=5,
+            overlay_style="arrow_pulse",
+        )
+    )
+    assert started.status is not None
+    assert len(planner_calls) == 1
+
+    observed = __import__("asyncio").run(
+        orchestrator.observe(
+            screen_context=_screen_context(tmp_path, text="Kaggle Competitions Datasets Models"),
+            region_context=None,
+            profile=profile,
+            provider=_StubPlannerProvider(),
+            completion_mode="conservative",
+            auto_advance_sensitivity=0.85,
+            overlay_style="arrow_pulse",
+        )
+    )
+    assert observed.current_step is not None
+    assert observed.current_step.step_id == "2"
+    assert observed.overlay_target is not None
+    assert len(planner_calls) == 1
+
+
 def test_answer_service_does_not_hallucinate_guided_target_on_failure(tmp_path: Path, monkeypatch):
     services = build_services(tmp_path)
     guidance = services["guidance"]

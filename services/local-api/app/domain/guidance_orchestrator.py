@@ -136,7 +136,6 @@ class GuidanceOrchestrator:
             overlay_style=overlay_style,
             profile=profile,
             provider=provider,
-            force_replan=True,
         )
 
     def cant_find_it(self) -> GuidedTaskStatus:
@@ -217,7 +216,11 @@ class GuidanceOrchestrator:
                 overlay_style=overlay_style,
                 profile=profile,
                 provider=provider,
-                force_replan=True,
+                force_replan=self.screen_state_analyzer.should_force_replan(
+                    screen_context=screen_context,
+                    current_step_index=status.session.current_step_index,
+                    steps=status.plan.steps if status.plan else [],
+                ),
             )
         if progress.state == "completed" and progress.confidence >= auto_advance_sensitivity:
             return await self.confirm_step(
