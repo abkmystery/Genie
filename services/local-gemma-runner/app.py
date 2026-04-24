@@ -92,6 +92,13 @@ def _write_audio_part(part: dict[str, Any]) -> Path | None:
     return Path(handle.name)
 
 
+def _move_inputs_to_device(inputs: dict[str, Any], device):
+    moved = {}
+    for key, value in inputs.items():
+        moved[key] = value.to(device) if hasattr(value, "to") else value
+    return moved
+
+
 @app.get("/health")
 def health():
     return {
@@ -129,13 +136,14 @@ def chat_completions(request: ChatCompletionRequest):
     prompt, media_parts = _extract_prompt_and_media(request.messages)
     audio_paths: list[Path] = []
     try:
-        conversation: list[dict[str, Any]] = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
+        conversation: list[dict[str, Any]] = [{"role": "user", "content": []}]
         for part in media_parts:
             if part.get("type") == "input_audio":
                 audio_path = _write_audio_part(part)
                 if audio_path:
                     audio_paths.append(audio_path)
-                    conversation[0]["content"].append({"type": "audio", "audio": str(audio_path)})
+                    conversation[0]["content"].append({"type": "audio", "url": str(audio_path)})
+        conversation[0]["content"].append({"type": "text", "text": prompt})
 
         inputs = processor.apply_chat_template(
             conversation,
@@ -144,9 +152,15 @@ def chat_completions(request: ChatCompletionRequest):
             return_dict=True,
             return_tensors="pt",
         )
-        inputs = {key: value.to(model.device) for key, value in inputs.items()}
+        inputs = _move_inputs_to_device(inputs, model.device)
         output = model.generate(**inputs, max_new_tokens=request.max_tokens, do_sample=request.temperature > 0, temperature=max(request.temperature, 0.01))
-        decoded = processor.batch_decode(output[:, inputs["input_ids"].shape[-1] :], skip_special_tokens=True)[0].strip()
+        generated_ids = output[:, inputs["input_ids"].shape[-1] :]
+        decoded = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0].strip()
+        if hasattr(processor, "parse_response"):
+            try:
+                decoded = processor.parse_response(decoded).get("content", decoded).strip()
+            except Exception:
+                pass
         return {
             "choices": [
                 {

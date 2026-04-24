@@ -35,14 +35,6 @@ class StepProgressDetector:
                 auto_advanced=state == "completed",
             )
 
-        if target_terms and target_terms & current_terms:
-            return StepProgressState(
-                state="waiting",
-                confidence=0.25,
-                reason="The target still appears to be visible, so I am waiting for confirmation.",
-                auto_advanced=False,
-            )
-
         if screen_changed or current_screen_text.strip() != previous_screen_text.strip():
             if self._looks_like_navigation_step(step, instruction_terms | target_terms):
                 return StepProgressState(
@@ -51,10 +43,25 @@ class StepProgressDetector:
                     reason="The screen changed after a navigation or address-bar step.",
                     auto_advanced=True,
                 )
+            if self._looks_like_click_or_filter_step(step, instruction_terms | target_terms):
+                return StepProgressState(
+                    state="completed",
+                    confidence=0.88 if mode == "balanced" else 0.84,
+                    reason="The visible page changed after the guided click or filter step.",
+                    auto_advanced=True,
+                )
             return StepProgressState(
                 state="uncertain",
                 confidence=0.52 if mode == "balanced" else 0.4,
                 reason="The visible screen changed, so I am re-checking the next step from the current screen.",
+                auto_advanced=False,
+            )
+
+        if target_terms and target_terms & current_terms:
+            return StepProgressState(
+                state="waiting",
+                confidence=0.25,
+                reason="The target still appears to be visible, so I am waiting for confirmation.",
                 auto_advanced=False,
             )
 
@@ -71,3 +78,25 @@ class StepProgressDetector:
         if navigation_words & step_terms:
             return True
         return any(marker in text for marker in ("http://", "https://", ".com", ".org", ".net", "address bar", "search bar"))
+
+    def _looks_like_click_or_filter_step(self, step: GuidedTaskStep, step_terms: set[str]) -> bool:
+        text = f"{step.instruction_text} {step.target_description} {step.completion_hint}".lower()
+        action_words = {
+            "click",
+            "select",
+            "choose",
+            "filter",
+            "sort",
+            "apply",
+            "menu",
+            "dropdown",
+            "button",
+            "checkbox",
+            "competition",
+            "competitions",
+            "prize",
+            "reward",
+        }
+        if action_words & step_terms:
+            return True
+        return any(marker in text for marker in ("click ", "select ", "filter", "sort", "highest prize", "prize"))

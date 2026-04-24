@@ -205,6 +205,43 @@ def test_target_grounder_uses_address_bar_heuristic(tmp_path: Path):
     assert result.confidence >= 0.8
 
 
+def test_target_grounder_uses_broad_kaggle_filter_area(tmp_path: Path):
+    class _Registry:
+        demo_resolver = None
+        credential_store = type("Store", (), {"get": lambda self, provider_id: {}})()
+
+    grounder = TargetGrounder(_Registry())
+    step = GuidedTaskStep(
+        step_id="step-filter",
+        order_index=2,
+        instruction_text="Use filters or sorting to find the highest prize competitions",
+        target_description="prize filter",
+        completion_hint="High prize competitions are visible",
+        grounding_required=True,
+    )
+    result = __import__("asyncio").run(
+        grounder.ground(
+            step=step,
+            screen_context=_screen_context(tmp_path, text="Kaggle Competitions Search Sort by"),
+            profile=ProviderConfig(
+                id="demo",
+                display_name="Demo",
+                description="Demo",
+                transport="mock",
+                backend_base_url="http://127.0.0.1",
+                model_name="stub",
+                capabilities=ProviderCapabilities(),
+            ),
+            overlay_style="arrow_pulse",
+        )
+    )
+    assert result.success is True
+    assert result.bbox is not None
+    assert result.bbox.target_label == "competition filters and sorting"
+    assert result.bbox.render_style == "highlight_only"
+    assert result.bbox.width > 900
+
+
 def test_step_progress_detector_conservative_behavior():
     detector = StepProgressDetector()
     step = GuidedTaskStep(
@@ -256,6 +293,34 @@ def test_step_progress_detector_completes_navigation_step_on_screen_change():
         screen_changed=True,
     )
     assert progress.state == "completed"
+
+
+def test_step_progress_detector_completes_click_filter_step_on_screen_change():
+    detector = StepProgressDetector()
+    step = GuidedTaskStep(
+        step_id="step-filter",
+        order_index=2,
+        instruction_text="Click the prize filter",
+        target_description="prize filter",
+        completion_hint="Filtered competitions are visible",
+        grounding_required=True,
+    )
+    progress = detector.detect(
+        step=step,
+        grounding=GroundingResult(
+            success=True,
+            confidence=0.8,
+            bbox=OverlayTarget(x=80, y=120, width=800, height=120, target_label="competition filters and sorting", render_style="highlight_only"),
+            target_label="competition filters and sorting",
+            reason="Highlighted broad filters area.",
+        ),
+        previous_screen_text="Kaggle Competitions Sort by",
+        current_screen_text="Kaggle Competitions Prize Featured",
+        mode="conservative",
+        screen_changed=True,
+    )
+    assert progress.state == "completed"
+    assert progress.auto_advanced is True
 
 
 def test_guided_session_start_advance_stop_flow(tmp_path: Path):

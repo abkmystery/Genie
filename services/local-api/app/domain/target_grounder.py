@@ -166,6 +166,31 @@ class TargetGrounder:
         overlay_style: str,
     ) -> GroundingResult | None:
         text = f"{step.instruction_text} {step.target_description}".lower()
+        screen_text = f"{screen_context.summary} {screen_context.text}".lower()
+        if (
+            any(marker in text for marker in ("filter", "sort", "prize", "reward", "highest"))
+            and any(marker in screen_text for marker in ("kaggle", "competition", "competitions"))
+        ):
+            capture = region_context.capture if region_context else screen_context.capture
+            candidate = {
+                "text": "competition filters and sorting",
+                "left": int(capture.width * 0.04),
+                "top": int(capture.height * 0.13),
+                "width": int(capture.width * 0.92),
+                "height": max(96, int(capture.height * 0.2)),
+                "pad_x": 0,
+                "pad_y": 0,
+            }
+            return self._build_overlay_result(
+                candidate=candidate,
+                confidence=0.72,
+                step=step,
+                overlay_style="highlight_only" if overlay_style == "arrow_pulse" else overlay_style,
+                region_context=region_context,
+                screen_context=screen_context,
+                reason="Highlighted the visible Kaggle filter and sorting area for this broad filter step.",
+            )
+
         if not any(marker in text for marker in ("address bar", "url bar", "browser address", "type url", "enter a url")):
             return None
 

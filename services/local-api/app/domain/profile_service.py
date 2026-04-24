@@ -62,7 +62,8 @@ class ProviderRegistry:
         resolved_credentials = credentials if credentials is not None else (self.credential_store.get(profile.id) or {})
         endpoint = (profile.endpoint_override or profile.backend_base_url or "").rstrip("/")
         if (
-            (profile.api_style or "genie_gateway") == "openai_compatible"
+            profile.id in {"local", "custom"}
+            and (profile.api_style or "genie_gateway") == "openai_compatible"
             and endpoint
             and profile.capabilities.supports_stt
             and profile.model_name
