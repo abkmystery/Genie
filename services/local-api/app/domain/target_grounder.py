@@ -38,6 +38,10 @@ class TargetGrounder:
             return GroundingResult(success=True, confidence=1.0, bbox=None, target_label=step.target_description, reason="This step does not require a grounded target.")
 
         image_path = Path(region_context.capture.path if region_context else screen_context.capture.path)
+        heuristic = self._heuristic_target(step=step, screen_context=screen_context, region_context=region_context, overlay_style=overlay_style)
+        if heuristic is not None:
+            return heuristic
+
         boxes = self._extract_ocr_boxes(image_path)
         candidates = self._score_candidates(step, boxes)
         if candidates:
@@ -84,11 +88,15 @@ class TargetGrounder:
     ) -> GroundingResult:
         offset_x = region_context.selection.x if region_context else 0
         offset_y = region_context.selection.y if region_context else 0
+        left = max(0, int(candidate["left"]) - int(candidate.get("pad_x", 10)))
+        top = max(0, int(candidate["top"]) - int(candidate.get("pad_y", 7)))
+        width = int(candidate["width"]) + (int(candidate.get("pad_x", 10)) * 2)
+        height = int(candidate["height"]) + (int(candidate.get("pad_y", 7)) * 2)
         overlay = OverlayTarget(
-            x=offset_x + int(candidate["left"]),
-            y=offset_y + int(candidate["top"]),
-            width=max(24, int(candidate["width"])),
-            height=max(24, int(candidate["height"])),
+            x=offset_x + left,
+            y=offset_y + top,
+            width=max(36, width),
+            height=max(30, height),
             capture_width=screen_context.capture.width,
             capture_height=screen_context.capture.height,
             target_label=str(candidate["text"]).strip(),
@@ -148,6 +156,38 @@ class TargetGrounder:
             scored.append((confidence, candidate))
         scored.sort(key=lambda item: item[0], reverse=True)
         return scored
+
+    def _heuristic_target(
+        self,
+        *,
+        step: GuidedTaskStep,
+        screen_context: ScreenContext,
+        region_context: RegionContext | None,
+        overlay_style: str,
+    ) -> GroundingResult | None:
+        text = f"{step.instruction_text} {step.target_description}".lower()
+        if not any(marker in text for marker in ("address bar", "url bar", "browser address", "type url", "enter a url")):
+            return None
+
+        capture = region_context.capture if region_context else screen_context.capture
+        candidate = {
+            "text": "address bar",
+            "left": int(capture.width * 0.065),
+            "top": int(capture.height * 0.052),
+            "width": int(capture.width * 0.76),
+            "height": max(34, int(capture.height * 0.032)),
+            "pad_x": 0,
+            "pad_y": 0,
+        }
+        return self._build_overlay_result(
+            candidate=candidate,
+            confidence=0.82,
+            step=step,
+            overlay_style=overlay_style,
+            region_context=region_context,
+            screen_context=screen_context,
+            reason="Estimated the browser address bar from the visible browser chrome.",
+        )
 
     async def _ground_with_model(
         self,
@@ -229,6 +269,8 @@ class TargetGrounder:
             top=top,
             width=width,
             height=height,
+            step=step,
+            model_label=str(parsed.get("label") or ""),
             boxes=self._extract_ocr_boxes(Path(image_context.path)),
         )
         if refined is not None:
@@ -294,9 +336,20 @@ class TargetGrounder:
             return None
         return payload
 
-    def _refine_with_ocr(self, *, left: int, top: int, width: int, height: int, boxes: list[dict[str, object]]) -> tuple[int, int, int, int, str] | None:
+    def _refine_with_ocr(
+        self,
+        *,
+        left: int,
+        top: int,
+        width: int,
+        height: int,
+        step: GuidedTaskStep,
+        model_label: str,
+        boxes: list[dict[str, object]],
+    ) -> tuple[int, int, int, int, str] | None:
         if not boxes:
             return None
+        desired_terms = terms(f"{step.target_description} {step.instruction_text} {model_label}")
         center_x = left + (width / 2)
         center_y = top + (height / 2)
         search_left = left - max(40, width // 2)
@@ -306,6 +359,9 @@ class TargetGrounder:
 
         nearest: tuple[float, dict[str, object]] | None = None
         for candidate in boxes:
+            candidate_terms = terms(str(candidate["text"]))
+            if desired_terms and not (candidate_terms & desired_terms):
+                continue
             candidate_left = int(candidate["left"])
             candidate_top = int(candidate["top"])
             candidate_width = int(candidate["width"])

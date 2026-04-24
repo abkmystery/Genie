@@ -168,6 +168,43 @@ def test_target_grounder_success_and_failure(tmp_path: Path, monkeypatch):
     assert failed.bbox is None
 
 
+def test_target_grounder_uses_address_bar_heuristic(tmp_path: Path):
+    class _Registry:
+        demo_resolver = None
+        credential_store = type("Store", (), {"get": lambda self, provider_id: {}})()
+
+    grounder = TargetGrounder(_Registry())
+    step = GuidedTaskStep(
+        step_id="step-url",
+        order_index=0,
+        instruction_text="Click the address bar and enter kaggle.com",
+        target_description="address bar",
+        completion_hint="Kaggle page is visible",
+        grounding_required=True,
+    )
+    result = __import__("asyncio").run(
+        grounder.ground(
+            step=step,
+            screen_context=_screen_context(tmp_path, text="New tab Search or type a URL"),
+            profile=ProviderConfig(
+                id="demo",
+                display_name="Demo",
+                description="Demo",
+                transport="mock",
+                backend_base_url="http://127.0.0.1",
+                model_name="stub",
+                capabilities=ProviderCapabilities(),
+            ),
+            overlay_style="arrow_pulse",
+        )
+    )
+    assert result.success is True
+    assert result.bbox is not None
+    assert result.bbox.target_label == "address bar"
+    assert result.bbox.width > 500
+    assert result.confidence >= 0.8
+
+
 def test_step_progress_detector_conservative_behavior():
     detector = StepProgressDetector()
     step = GuidedTaskStep(

@@ -12,7 +12,7 @@ export function Launcher({ open, onToggle }: LauncherProps) {
           <span className="launcher-orbit launcher-orbit-outer" />
           <span className="launcher-orbit launcher-orbit-inner" />
           <span className="launcher-core">G</span>
-          <span className="launcher-spark">✦</span>
+          <span className="launcher-spark" />
         </span>
         <span className="launcher-label">{open ? "Close" : "Genie"}</span>
       </button>

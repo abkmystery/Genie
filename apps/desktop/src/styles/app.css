@@ -2,13 +2,15 @@
   font-family: "Segoe UI", "Aptos", sans-serif;
   color: #17202f;
   --panel-bg:
-    radial-gradient(circle at top right, rgba(132, 204, 193, 0.18), transparent 26%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(242, 247, 252, 0.98));
-  --accent: #0b6b67;
+    radial-gradient(circle at 82% 0%, rgba(82, 183, 136, 0.16), transparent 32%),
+    radial-gradient(circle at 0% 100%, rgba(234, 179, 8, 0.1), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 248, 252, 0.98));
+  --accent: #0a6a5e;
   --accent-soft: #dff4f1;
-  --accent-strong: #0d3d62;
-  --border: rgba(29, 41, 57, 0.14);
-  --shadow: 0 24px 64px rgba(20, 28, 45, 0.24);
+  --accent-strong: #163b5c;
+  --gold: #c88719;
+  --border: rgba(17, 24, 39, 0.13);
+  --shadow: 0 26px 72px rgba(15, 23, 42, 0.22);
   --warning: #9a3412;
 }
 
@@ -37,14 +39,15 @@ select {
   height: 96px;
   display: grid;
   grid-template-rows: 16px 1fr;
-  border-radius: 30px;
+  border-radius: 26px;
   overflow: hidden;
   box-shadow: var(--shadow);
+  border: 1px solid rgba(255, 255, 255, 0.48);
 }
 
 .launcher-handle {
   -webkit-app-region: drag;
-  background: linear-gradient(135deg, #0f3d4d, #176a57);
+  background: linear-gradient(90deg, #12233a, #0d6f68 55%, #d39b25);
 }
 
 .launcher-button {
@@ -54,8 +57,8 @@ select {
   border: none;
   border-radius: 0;
   background:
-    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.18), transparent 34%),
-    linear-gradient(145deg, #0f3554, #0d6f68 58%, #7ec7bc);
+    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.22), transparent 32%),
+    linear-gradient(145deg, #10243c, #0d6f68 58%, #d5a540);
   color: #fff;
   display: flex;
   flex-direction: column;
@@ -120,9 +123,11 @@ select {
   position: absolute;
   top: -2px;
   right: -3px;
-  font-size: 0.72rem;
-  color: #dffcf6;
-  text-shadow: 0 0 12px rgba(223, 252, 246, 0.55);
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #f6c453;
+  box-shadow: 0 0 16px rgba(246, 196, 83, 0.85);
 }
 
 .launcher-label {
@@ -135,7 +140,7 @@ select {
   width: 100%;
   height: 100vh;
   position: relative;
-  border-radius: 24px;
+  border-radius: 22px;
   background: var(--panel-bg);
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
@@ -143,6 +148,20 @@ select {
   display: grid;
   grid-template-rows: auto auto 1fr auto;
   backdrop-filter: blur(20px);
+}
+
+.panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.42), transparent 24%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.26), transparent 18%);
+}
+
+.panel > * {
+  position: relative;
 }
 
 .panel-header,
@@ -173,7 +192,7 @@ select {
 
 .panel-header h1 {
   font-family: "Aptos Display", "Segoe UI Semibold", "Georgia", serif;
-  font-size: 2rem;
+  font-size: 1.9rem;
   font-weight: 700;
   letter-spacing: 0.02em;
   color: #11243b;
@@ -203,16 +222,34 @@ select {
 .composer-footer button,
 .settings-grid button {
   border: 1px solid var(--border);
-  background: #fff;
+  background: rgba(255, 255, 255, 0.88);
   color: #17202f;
-  border-radius: 12px;
+  border-radius: 10px;
   padding: 10px 12px;
   cursor: pointer;
+  transition: transform 120ms ease, border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
+}
+
+.tab-bar button:hover,
+.inline-actions button:hover,
+.composer-footer button:hover,
+.settings-grid button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(10, 106, 94, 0.28);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.1);
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 3px solid rgba(200, 135, 25, 0.28);
+  outline-offset: 2px;
 }
 
 .tab-bar button.active,
 .primary-button {
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), #174a74);
   color: #fff;
   border-color: transparent;
 }
@@ -237,7 +274,7 @@ select {
   background: rgba(248, 252, 255, 0.88);
   padding: 10px 10px;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 12px;
   backdrop-filter: blur(16px);
 }
 
@@ -277,13 +314,14 @@ select {
 
 .message-card {
   padding: 14px;
-  border-radius: 16px;
+  border-radius: 12px;
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
 }
 
 .message-card.user {
-  background: #edf9f6;
+  background: linear-gradient(180deg, #eefaf6, #f8fffd);
 }
 
 .message-body {
@@ -352,8 +390,10 @@ select {
 
 .guidance-card {
   border: 1px solid rgba(11, 107, 103, 0.16);
-  background: linear-gradient(180deg, rgba(239, 252, 248, 0.95), rgba(255, 255, 255, 0.94));
-  border-radius: 18px;
+  background:
+    linear-gradient(90deg, rgba(10, 106, 94, 0.08), transparent 46%),
+    linear-gradient(180deg, rgba(246, 252, 250, 0.98), rgba(255, 255, 255, 0.94));
+  border-radius: 12px;
   padding: 14px;
   display: flex;
   flex-direction: column;
@@ -415,7 +455,7 @@ select {
 .field textarea,
 .field select {
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 10px;
   padding: 12px;
   background: rgba(255, 255, 255, 0.94);
 }
@@ -443,7 +483,7 @@ select {
 .diagnostics-card {
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.86);
-  border-radius: 16px;
+  border-radius: 12px;
   padding: 14px;
 }
 
@@ -465,8 +505,8 @@ select {
 }
 
 .profile-card.active {
-  border-color: rgba(15, 118, 110, 0.45);
-  background: #effcf8;
+  border-color: rgba(10, 106, 94, 0.42);
+  background: linear-gradient(180deg, #effcf8, #ffffff);
 }
 
 .settings-grid {
@@ -575,11 +615,11 @@ select {
 
 .guidance-highlight {
   position: absolute;
-  border-radius: 10px;
-  border: 3px solid rgba(14, 165, 233, 0.98);
-  background: rgba(14, 165, 233, 0.12);
+  border-radius: 8px;
+  border: 3px solid rgba(245, 158, 11, 0.98);
+  background: rgba(245, 158, 11, 0.13);
   box-shadow:
-    0 0 0 7px rgba(14, 165, 233, 0.1),
+    0 0 0 7px rgba(245, 158, 11, 0.12),
     0 0 0 1px rgba(2, 6, 23, 0.18);
 }
 
@@ -598,7 +638,7 @@ select {
 .guidance-arrow-line {
   width: 78px;
   height: 8px;
-  background: linear-gradient(90deg, rgba(14, 165, 233, 0.08), rgba(14, 165, 233, 0.98));
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.98));
   border-radius: 999px;
 }
 
@@ -607,7 +647,7 @@ select {
   height: 0;
   border-top: 14px solid transparent;
   border-bottom: 14px solid transparent;
-  border-left: 24px solid rgba(14, 165, 233, 0.98);
+  border-left: 24px solid rgba(245, 158, 11, 0.98);
   margin-left: -2px;
 }
 
@@ -616,9 +656,9 @@ select {
   width: 14px;
   height: 14px;
   border-radius: 999px;
-  background: #38bdf8;
+  background: #f59e0b;
   border: 2px solid #f8fafc;
-  box-shadow: 0 0 0 5px rgba(14, 165, 233, 0.24);
+  box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.24);
 }
 
 .guidance-badge {
@@ -626,9 +666,9 @@ select {
   min-width: 220px;
   max-width: 320px;
   padding: 12px 14px;
-  border-radius: 16px;
-  background: rgba(20, 24, 33, 0.94);
-  border: 1px solid rgba(251, 191, 36, 0.28);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.94);
+  border: 1px solid rgba(245, 158, 11, 0.34);
   color: #fffdf7;
   box-shadow: 0 18px 40px rgba(6, 18, 27, 0.32);
 }
