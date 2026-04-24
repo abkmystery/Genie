@@ -66,7 +66,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status} ${response.statusText}`);
+    let detail = "";
+    try {
+      const payload = (await response.json()) as { detail?: unknown };
+      detail = typeof payload.detail === "string" ? payload.detail : JSON.stringify(payload.detail ?? payload);
+    } catch {
+      detail = "";
+    }
+    throw new Error(detail ? `Request failed: ${response.status} ${response.statusText}. ${detail}` : `Request failed: ${response.status} ${response.statusText}`);
   }
   return (await response.json()) as T;
 }
@@ -145,7 +152,7 @@ export const api = {
       body: JSON.stringify({ prompt: "capture region", region_selection: selection }),
     }),
   transcribe: (payload?: { transcriptHint?: string; audioBase64?: string; audioFormat?: string }) =>
-    request<{ text: string }>("/audio/transcribe", {
+    request<{ text: string; error?: string }>("/audio/transcribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

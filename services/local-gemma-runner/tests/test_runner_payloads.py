@@ -1,15 +1,22 @@
 from __future__ import annotations
 
 import base64
+import importlib.util
 import sys
 from pathlib import Path
 
 
 RUNNER_DIR = Path(__file__).resolve().parents[1]
-if str(RUNNER_DIR) not in sys.path:
-    sys.path.insert(0, str(RUNNER_DIR))
+APP_PATH = RUNNER_DIR / "app.py"
 
-from app import _build_gemma_messages, _dependency_status  # noqa: E402
+spec = importlib.util.spec_from_file_location("genie_local_gemma_runner_app", APP_PATH)
+assert spec is not None and spec.loader is not None
+runner_app = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = runner_app
+spec.loader.exec_module(runner_app)
+
+_build_gemma_messages = runner_app._build_gemma_messages
+_dependency_status = runner_app._dependency_status
 
 
 def test_dependency_status_exposes_actionable_fields():

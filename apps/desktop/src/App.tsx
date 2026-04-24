@@ -555,12 +555,19 @@ export default function App() {
 
       micControllerRef.current = null;
       setMicStatus("transcribing");
-      const next =
-        speechRecognition && !looksLikeBase64Audio(capturedValue)
-          ? String(capturedValue).trim()
-          : (await api.transcribe({ audioBase64: String(capturedValue), audioFormat: "wav" })).text.trim();
+      let next = "";
+      let transcriptionError = "";
+      if (speechRecognition && !looksLikeBase64Audio(capturedValue)) {
+        next = String(capturedValue).trim();
+      } else {
+        const transcription = await api.transcribe({ audioBase64: String(capturedValue), audioFormat: "wav" });
+        next = transcription.text.trim();
+        transcriptionError = transcription.error ?? "";
+      }
       if (next) {
         setPrompt(next);
+      } else if (transcriptionError) {
+        setError(`Mic could not transcribe that audio. ${transcriptionError}`);
       } else {
         setError("No speech detected. Try again in a quieter environment.");
       }

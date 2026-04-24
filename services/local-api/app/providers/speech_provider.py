@@ -141,22 +141,36 @@ class OptionalWhisperSpeechToTextProvider(SpeechToTextProvider):
             handle.write(base64.b64decode(audio_base64))
 
         try:
+            attempted_provider = False
+            provider_errors: list[str] = []
             if self._has_faster_whisper:
+                attempted_provider = True
                 from faster_whisper import WhisperModel  # type: ignore
 
-                model = WhisperModel(self.model_name, device="cpu", compute_type="int8", download_root=str(self.download_root) if self.download_root else None)
-                segments, _info = model.transcribe(str(temp_path))
-                text = " ".join(segment.text.strip() for segment in segments).strip()
-                if text:
-                    return text
+                try:
+                    model = WhisperModel(self.model_name, device="cpu", compute_type="int8", download_root=str(self.download_root) if self.download_root else None)
+                    segments, _info = model.transcribe(str(temp_path))
+                    text = " ".join(segment.text.strip() for segment in segments).strip()
+                    if text:
+                        return text
+                except Exception as exc:
+                    provider_errors.append(f"faster-whisper: {type(exc).__name__}: {exc}")
             if self._has_whisper:
+                attempted_provider = True
                 import whisper  # type: ignore
 
-                model = whisper.load_model(self.model_name, download_root=str(self.download_root) if self.download_root else None)
-                result = model.transcribe(str(temp_path))
-                text = str(result.get("text") or "").strip()
-                if text:
-                    return text
+                try:
+                    model = whisper.load_model(self.model_name, download_root=str(self.download_root) if self.download_root else None)
+                    result = model.transcribe(str(temp_path))
+                    text = str(result.get("text") or "").strip()
+                    if text:
+                        return text
+                except Exception as exc:
+                    provider_errors.append(f"whisper: {type(exc).__name__}: {exc}")
+            if provider_errors:
+                raise RuntimeError("; ".join(provider_errors))
+            if attempted_provider:
+                raise RuntimeError("No speech detected in the recording.")
             raise RuntimeError("No supported local Whisper package is available for transcription.")
         finally:
             try:

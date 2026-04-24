@@ -2,6 +2,8 @@ import asyncio
 import base64
 
 from app.models.contracts import ProviderCapabilities, ProviderConfig
+from app.main import transcribe_audio
+from app.models.contracts import SpeechToTextRequest
 from app.domain.profile_service import ProviderRegistry
 from app.providers.credential_store import FileCredentialStore
 from app.providers.speech_provider import OpenAICompatibleSpeechToTextProvider, OptionalWhisperSpeechToTextProvider, PowerShellSpeechTtsProvider, UnavailableSpeechToTextProvider
@@ -81,8 +83,46 @@ def test_provider_registry_does_not_send_demo_audio_to_raw_provider_without_loca
     assert isinstance(provider, UnavailableSpeechToTextProvider)
 
 
+def test_whisper_provider_reports_no_speech_separately(monkeypatch):
+    class _FakeWhisperModel:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def transcribe(self, _path):
+            return [], object()
+
+    monkeypatch.setattr("app.providers.speech_provider._module_available", lambda name: name == "faster_whisper")
+    monkeypatch.setattr("faster_whisper.WhisperModel", _FakeWhisperModel)
+    provider = OptionalWhisperSpeechToTextProvider()
+
+    try:
+        asyncio.run(provider.transcribe(audio_base64=base64.b64encode(b"fake-wav").decode("ascii"), audio_format="wav"))
+    except RuntimeError as exc:
+        assert str(exc) == "No speech detected in the recording."
+    else:
+        raise AssertionError("Expected no-speech RuntimeError")
+
+
 def test_text_to_speech_provider_reports_diagnostics():
     provider = PowerShellSpeechTtsProvider()
     diagnostics = provider.diagnostics()
     assert diagnostics["provider"] == "powershell-system-speech"
     assert diagnostics["available"] is True
+
+
+def test_audio_transcribe_returns_soft_error_instead_of_http_503(monkeypatch):
+    class _FailingProvider:
+        async def transcribe(self, **_kwargs):
+            raise RuntimeError("No speech detected.")
+
+        def diagnostics(self):
+            return {"provider": "test-stt", "available": True}
+
+    monkeypatch.setattr("app.main.container.profile_manager.load_active_profile", lambda: object())
+    monkeypatch.setattr("app.main.container.provider_registry.create_speech_to_text_client", lambda _profile: _FailingProvider())
+
+    response = asyncio.run(transcribe_audio(SpeechToTextRequest(audio_base64="ZmFrZQ==", audio_format="wav")))
+
+    assert response["text"] == ""
+    assert response["error"] == "No speech detected."
+    assert response["provider"]["provider"] == "test-stt"

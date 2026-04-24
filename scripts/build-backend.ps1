@@ -74,7 +74,14 @@ try {
     --workpath (Join-Path $outDirAbs "pyinstaller-work") `
     --specpath (Join-Path $outDirAbs "pyinstaller-spec") `
     --exclude-module "torch" `
+    --exclude-module "torchvision" `
     --exclude-module "tensorflow" `
+    --exclude-module "transformers" `
+    --exclude-module "datasets" `
+    --exclude-module "bitsandbytes" `
+    --exclude-module "timm" `
+    --exclude-module "nltk" `
+    --exclude-module "sklearn" `
     --exclude-module "pytest" `
     --exclude-module "reportlab" `
     --exclude-module "matplotlib" `

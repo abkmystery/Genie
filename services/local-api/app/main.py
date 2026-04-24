@@ -241,7 +241,11 @@ async def transcribe_audio(request: SpeechToTextRequest):
             transcript_hint=request.transcript_hint,
         )
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return {
+            "text": "",
+            "error": str(exc),
+            "provider": provider.diagnostics(),
+        }
     return {"text": text}
 
 

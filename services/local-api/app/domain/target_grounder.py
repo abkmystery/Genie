@@ -167,17 +167,62 @@ class TargetGrounder:
     ) -> GroundingResult | None:
         text = f"{step.instruction_text} {step.target_description}".lower()
         screen_text = f"{screen_context.summary} {screen_context.text}".lower()
+        capture = region_context.capture if region_context else screen_context.capture
+        is_kaggle_competitions = any(marker in screen_text for marker in ("kaggle", "competition", "competitions"))
+
+        if is_kaggle_competitions and "filter" in text:
+            # Kaggle's competition page places a compact Filters control at the
+            # far right of the competition search bar. Ground that specific
+            # button instead of highlighting the entire filter/category region.
+            candidate = {
+                "text": "Filters",
+                "left": int(capture.width * 0.825),
+                "top": int(capture.height * 0.425),
+                "width": max(86, int(capture.width * 0.055)),
+                "height": max(36, int(capture.height * 0.045)),
+                "pad_x": 12,
+                "pad_y": 8,
+            }
+            return self._build_overlay_result(
+                candidate=candidate,
+                confidence=0.86,
+                step=step,
+                overlay_style=overlay_style,
+                region_context=region_context,
+                screen_context=screen_context,
+                reason="Located Kaggle's Filters button at the right side of the competition search bar.",
+            )
+
+        if is_kaggle_competitions and any(marker in text for marker in ("competitions tab", "competitions page", "open competitions", "click competitions")):
+            candidate = {
+                "text": "Competitions",
+                "left": int(capture.width * 0.01),
+                "top": int(capture.height * 0.225),
+                "width": max(170, int(capture.width * 0.105)),
+                "height": max(40, int(capture.height * 0.055)),
+                "pad_x": 8,
+                "pad_y": 4,
+            }
+            return self._build_overlay_result(
+                candidate=candidate,
+                confidence=0.84,
+                step=step,
+                overlay_style=overlay_style,
+                region_context=region_context,
+                screen_context=screen_context,
+                reason="Located the Kaggle Competitions navigation item in the left sidebar.",
+            )
+
         if (
             any(marker in text for marker in ("filter", "sort", "prize", "reward", "highest"))
-            and any(marker in screen_text for marker in ("kaggle", "competition", "competitions"))
+            and is_kaggle_competitions
         ):
-            capture = region_context.capture if region_context else screen_context.capture
             candidate = {
                 "text": "competition filters and sorting",
-                "left": int(capture.width * 0.04),
-                "top": int(capture.height * 0.13),
-                "width": int(capture.width * 0.92),
-                "height": max(96, int(capture.height * 0.2)),
+                "left": int(capture.width * 0.25),
+                "top": int(capture.height * 0.425),
+                "width": int(capture.width * 0.62),
+                "height": max(100, int(capture.height * 0.2)),
                 "pad_x": 0,
                 "pad_y": 0,
             }
@@ -194,7 +239,6 @@ class TargetGrounder:
         if not any(marker in text for marker in ("address bar", "url bar", "browser address", "type url", "enter a url")):
             return None
 
-        capture = region_context.capture if region_context else screen_context.capture
         candidate = {
             "text": "address bar",
             "left": int(capture.width * 0.065),

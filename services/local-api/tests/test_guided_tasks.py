@@ -237,9 +237,63 @@ def test_target_grounder_uses_broad_kaggle_filter_area(tmp_path: Path):
     )
     assert result.success is True
     assert result.bbox is not None
-    assert result.bbox.target_label == "competition filters and sorting"
-    assert result.bbox.render_style == "highlight_only"
-    assert result.bbox.width > 900
+    assert result.bbox.target_label == "Filters"
+    assert result.bbox.render_style == "arrow_pulse"
+    assert result.bbox.x > 900
+    assert result.confidence >= 0.85
+
+
+def test_target_grounder_uses_kaggle_competitions_sidebar_heuristic(tmp_path: Path):
+    class _Registry:
+        demo_resolver = None
+        credential_store = type("Store", (), {"get": lambda self, provider_id: {}})()
+
+    grounder = TargetGrounder(_Registry())
+    step = GuidedTaskStep(
+        step_id="step-competitions",
+        order_index=1,
+        instruction_text="Open the Competitions page",
+        target_description="Competitions tab",
+        completion_hint="Competitions and Hackathons page is visible",
+        grounding_required=True,
+    )
+    result = __import__("asyncio").run(
+        grounder.ground(
+            step=step,
+            screen_context=_screen_context(tmp_path, text="kaggle Home Competitions Benchmarks Competitions and Hackathons Filters"),
+            profile=ProviderConfig(
+                id="demo",
+                display_name="Demo",
+                description="Demo",
+                transport="mock",
+                backend_base_url="http://127.0.0.1",
+                model_name="stub",
+                capabilities=ProviderCapabilities(),
+            ),
+            overlay_style="arrow_pulse",
+        )
+    )
+    assert result.success is True
+    assert result.bbox is not None
+    assert result.bbox.target_label == "Competitions"
+    assert result.bbox.x < 80
+
+
+def test_guidance_screen_state_prioritizes_kaggle_filter_step_on_filter_page(tmp_path: Path):
+    from app.domain.guidance_screen_state import GuidanceScreenStateAnalyzer
+
+    analyzer = GuidanceScreenStateAnalyzer()
+    steps = [
+        GuidedTaskStep(step_id="open", order_index=0, instruction_text="Open Kaggle", target_description="address bar", completion_hint="Kaggle is visible", grounding_required=True),
+        GuidedTaskStep(step_id="competitions", order_index=1, instruction_text="Open the Competitions page", target_description="Competitions", completion_hint="Competitions page is visible", grounding_required=True),
+        GuidedTaskStep(step_id="filters", order_index=2, instruction_text="Click Filters to narrow by prize", target_description="Filters", completion_hint="Filters panel is open", grounding_required=True),
+    ]
+    indexes = analyzer.candidate_step_indexes(
+        screen_context=_screen_context(tmp_path, text="kaggle Competitions and Hackathons Search competitions Filters Featured Hackathons"),
+        current_step_index=1,
+        steps=steps,
+    )
+    assert indexes[0] == 2
 
 
 def test_step_progress_detector_conservative_behavior():

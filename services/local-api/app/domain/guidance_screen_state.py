@@ -114,13 +114,29 @@ class GuidanceScreenStateAnalyzer:
         return bool((target_terms and not (target_terms & current_terms)) or (label_terms and not (label_terms & current_terms)))
 
     def _step_relevance_score(self, *, step: GuidedTaskStep, screen_terms: set[str], current_step_index: int) -> float:
+        step_terms = terms(f"{step.target_description} {step.completion_hint} {step.instruction_text}")
         target_overlap = len(terms(step.target_description) & screen_terms)
         hint_overlap = len(terms(step.completion_hint) & screen_terms)
         instruction_overlap = len(terms(step.instruction_text) & screen_terms)
         position_bias = max(0.0, 0.9 - (abs(step.order_index - current_step_index) * 0.22))
         current_bias = 0.25 if step.order_index == current_step_index else 0.0
         forward_bias = 0.12 if step.order_index >= current_step_index else 0.0
-        return (target_overlap * 1.35) + (hint_overlap * 1.65) + (instruction_overlap * 0.75) + position_bias + current_bias + forward_bias
+        kaggle_filter_boost = 0.0
+        if {"kaggle", "competitions"} & screen_terms and {"filter", "filters", "prize", "reward", "highest", "sort"} & step_terms:
+            kaggle_filter_boost = 2.75
+        kaggle_page_penalty = 0.0
+        if {"kaggle", "competitions"} & screen_terms and {"address", "url", "open"} & step_terms and {"filter", "filters"} & screen_terms:
+            kaggle_page_penalty = 1.5
+        return (
+            (target_overlap * 1.35)
+            + (hint_overlap * 1.65)
+            + (instruction_overlap * 0.75)
+            + position_bias
+            + current_bias
+            + forward_bias
+            + kaggle_filter_boost
+            - kaggle_page_penalty
+        )
 
     def _step_overlap_signal(self, *, step: GuidedTaskStep, screen_terms: set[str]) -> int:
         return (
