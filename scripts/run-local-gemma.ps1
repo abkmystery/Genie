@@ -26,4 +26,18 @@ Write-Host "Starting local Gemma runner..." -ForegroundColor Cyan
 Write-Host "Model id:  $env:GENIE_LOCAL_MODEL_ID"
 Write-Host "Model dir: $env:GENIE_LOCAL_MODEL_DIR"
 
+$verifyScript = @'
+try:
+    import transformers
+    from transformers import AutoModelForMultimodalLM
+    print(f"Transformers ready: {transformers.__version__}")
+except Exception as exc:
+    raise SystemExit(
+        "This Python environment does not have Gemma 4 multimodal support. "
+        "Run npm.cmd run setup:local-gemma, then try again. "
+        f"Details: {type(exc).__name__}: {exc}"
+    )
+'@
+& $Python "-$PythonVersion" -c $verifyScript
+
 & $Python "-$PythonVersion" -m uvicorn app:app --app-dir services/local-gemma-runner --host 127.0.0.1 --port 8766

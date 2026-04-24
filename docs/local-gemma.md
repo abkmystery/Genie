@@ -12,6 +12,14 @@ google/gemma-4-E4B-it
 
 If your machine struggles, fall back to `google/gemma-4-E2B-it`. The hosted `gemma-4-26b-a4b-it` demo path remains the reliable fallback.
 
+Genie uses the official Hugging Face Gemma 4 multimodal path for this runner:
+
+- `AutoModelForMultimodalLM` for E2B/E4B audio input.
+- `AutoProcessor.apply_chat_template(...)` with `text`, `image`, and `audio` content parts.
+- OpenAI-compatible `/v1/chat/completions` at `http://127.0.0.1:8766/v1` so the rest of Genie does not care which backend is active.
+
+If `/v1/chat/completions` returns `503`, first open `http://127.0.0.1:8766/health`. The most common cause is that your Python environment has a Transformers build that does not expose `AutoModelForMultimodalLM` yet.
+
 ## Setup
 
 Run this once:
@@ -20,7 +28,7 @@ Run this once:
 npm.cmd run setup:local-gemma
 ```
 
-This downloads `google/gemma-4-E4B-it` into:
+This installs the local runner requirements, installs the latest Hugging Face Transformers build with Gemma 4 multimodal support, verifies `AutoModelForMultimodalLM`, and downloads `google/gemma-4-E4B-it` into:
 
 ```text
 models/gemma-4-E4B-it
@@ -36,6 +44,18 @@ Then run the local runner:
 
 ```powershell
 npm.cmd run dev:local-gemma
+```
+
+The runner now fails fast if the active Python environment cannot import Gemma 4 multimodal support. If you see that error, rerun:
+
+```powershell
+npm.cmd run setup:local-gemma
+```
+
+Manual repair command:
+
+```powershell
+py -3.11 -m pip install --upgrade --force-reinstall "transformers @ git+https://github.com/huggingface/transformers.git"
 ```
 
 For E4B or a custom folder, run:
@@ -70,4 +90,5 @@ google/gemma-4-E4B-it
 - This is experimental and not bundled into the default packaged app.
 - If it is slow or fails, switch Settings back to Demo.
 - Local mode now uses the Gemma 4 edge model itself for speech transcription through the local OpenAI-compatible runner.
-- The public packaged desktop build no longer needs bundled Whisper just to support Local mode audio.
+- Demo mode can still use the packaged offline speech helper so hackathon demos do not depend on Gemma 4 edge audio being configured locally.
+- E4B is the recommended local quality target; E2B is the fallback if E4B is too slow or memory-heavy on a 16 GB laptop.

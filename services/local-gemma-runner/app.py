@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import mimetypes
 import os
 import tempfile
 from pathlib import Path
@@ -9,23 +10,39 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-try:
-    import torch
-    from transformers import AutoModelForCausalLM, AutoProcessor
+_IMPORT_ERROR: str | None = None
+_TRANSFORMERS_VERSION: str | None = None
 
+try:  # pragma: no cover - depends on the user's local ML environment
+    import torch
+    import transformers
+    from transformers import AutoProcessor
+
+    _TRANSFORMERS_VERSION = getattr(transformers, "__version__", "unknown")
     try:
         from transformers import AutoModelForMultimodalLM
-    except Exception:  # pragma: no cover - depends on installed transformers version
+    except Exception:
         AutoModelForMultimodalLM = None
-except Exception:  # pragma: no cover - optional experimental runner deps
+except Exception as exc:  # pragma: no cover - optional experimental runner deps
     torch = None
     AutoProcessor = None
-    AutoModelForCausalLM = None
     AutoModelForMultimodalLM = None
+    _IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
 
 
 DEFAULT_MODEL_ID = os.environ.get("GENIE_LOCAL_MODEL_ID", "google/gemma-4-E4B-it")
-DEFAULT_MODEL_DIR = Path(os.environ.get("GENIE_LOCAL_MODEL_DIR", Path(__file__).resolve().parents[2] / "models" / "gemma-4-E4B-it"))
+DEFAULT_MODEL_DIR = Path(
+    os.environ.get(
+        "GENIE_LOCAL_MODEL_DIR",
+        Path(__file__).resolve().parents[2] / "models" / "gemma-4-E4B-it",
+    )
+)
+GEMMA4_SETUP_HINT = (
+    "Install a Transformers build with Gemma 4 multimodal support, then restart the runner. "
+    "Recommended: npm.cmd run setup:local-gemma. Manual fallback: "
+    "py -3.11 -m pip install --upgrade --force-reinstall "
+    "\"transformers @ git+https://github.com/huggingface/transformers.git\""
+)
 
 
 class ChatCompletionRequest(BaseModel):
@@ -35,85 +52,171 @@ class ChatCompletionRequest(BaseModel):
     temperature: float = 0.2
 
 
-app = FastAPI(title="Genie Local Gemma Runner", version="0.1.0")
+app = FastAPI(title="Genie Local Gemma Runner", version="0.2.0")
 _processor = None
 _model = None
+
+
+def _dependency_status() -> dict[str, Any]:
+    has_required_model = AutoModelForMultimodalLM is not None
+    return {
+        "ok": bool(torch and AutoProcessor and has_required_model),
+        "transformers_version": _TRANSFORMERS_VERSION,
+        "torch_available": torch is not None,
+        "auto_processor_available": AutoProcessor is not None,
+        "auto_model_for_multimodal_lm_available": has_required_model,
+        "import_error": _IMPORT_ERROR,
+        "setup_hint": None if has_required_model else GEMMA4_SETUP_HINT,
+    }
+
+
+def _model_ref(model_name: str) -> str:
+    return str(DEFAULT_MODEL_DIR if DEFAULT_MODEL_DIR.exists() else model_name)
+
+
+def _raise_unavailable() -> None:
+    status = _dependency_status()
+    if status["ok"]:
+        return
+    missing = [
+        key
+        for key in ("torch_available", "auto_processor_available", "auto_model_for_multimodal_lm_available")
+        if not status.get(key)
+    ]
+    raise RuntimeError(
+        "Local Gemma 4 runner is not ready. "
+        f"Missing: {', '.join(missing) or 'unknown dependency'}. "
+        f"Transformers: {status.get('transformers_version') or 'not importable'}. "
+        f"{GEMMA4_SETUP_HINT}"
+    )
 
 
 def _load_model(model_name: str):
     global _processor, _model
     if _processor is not None and _model is not None:
         return _processor, _model
-    if AutoProcessor is None or torch is None or (AutoModelForMultimodalLM is None and AutoModelForCausalLM is None):
-        raise RuntimeError("Transformers Gemma 4 dependencies are not installed.")
 
-    model_ref = str(DEFAULT_MODEL_DIR if DEFAULT_MODEL_DIR.exists() else model_name)
-    _processor = AutoProcessor.from_pretrained(model_ref)
-    model_class = AutoModelForMultimodalLM or AutoModelForCausalLM
-    _model = model_class.from_pretrained(
-        model_ref,
-        dtype="auto",
-        low_cpu_mem_usage=True,
-        device_map="auto",
-    ).eval()
+    _raise_unavailable()
+    model_ref = _model_ref(model_name)
+    _processor = AutoProcessor.from_pretrained(model_ref, padding_side="left", use_fast=True)
+    load_kwargs: dict[str, Any] = {
+        "dtype": torch.bfloat16 if torch.cuda.is_available() else "auto",
+        "device_map": "auto",
+        "low_cpu_mem_usage": True,
+    }
+    try:
+        load_kwargs["attn_implementation"] = "sdpa"
+        _model = AutoModelForMultimodalLM.from_pretrained(model_ref, **load_kwargs).eval()
+    except TypeError:
+        load_kwargs.pop("attn_implementation", None)
+        _model = AutoModelForMultimodalLM.from_pretrained(model_ref, **load_kwargs).eval()
     return _processor, _model
 
 
-def _extract_prompt_and_media(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
-    texts: list[str] = []
-    media: list[dict[str, Any]] = []
-    for message in messages:
-        content = message.get("content")
-        if isinstance(content, str):
-            texts.append(content)
-            continue
-        if not isinstance(content, list):
-            continue
-        for part in content:
-            if not isinstance(part, dict):
-                continue
-            if part.get("type") == "text":
-                texts.append(str(part.get("text") or ""))
-            elif part.get("type") in {"image_url", "input_audio"}:
-                media.append(part)
-    return "\n".join(text for text in texts if text.strip()).strip(), media
+def _decode_data_url(data_url: str) -> tuple[bytes, str]:
+    header, encoded = data_url.split(",", 1)
+    mime_type = header.removeprefix("data:").split(";", 1)[0] or "application/octet-stream"
+    return base64.b64decode(encoded), mime_type
+
+
+def _write_temp_file(*, data: bytes, suffix: str) -> Path:
+    handle = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    with handle:
+        handle.write(data)
+    return Path(handle.name)
 
 
 def _write_audio_part(part: dict[str, Any]) -> Path | None:
     audio = part.get("input_audio") or {}
     data = audio.get("data")
-    fmt = audio.get("format") or "wav"
     if not data:
         return None
-    suffix = f".{fmt}"
-    handle = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-    with handle:
-        handle.write(base64.b64decode(data))
-    return Path(handle.name)
+    audio_format = str(audio.get("format") or "wav").lower().lstrip(".")
+    return _write_temp_file(data=base64.b64decode(data), suffix=f".{audio_format}")
 
 
-def _move_inputs_to_device(inputs: dict[str, Any], device):
-    moved = {}
-    for key, value in inputs.items():
-        moved[key] = value.to(device) if hasattr(value, "to") else value
-    return moved
+def _write_image_part(part: dict[str, Any]) -> Path | None:
+    image_url = (part.get("image_url") or {}).get("url")
+    if not isinstance(image_url, str) or not image_url.startswith("data:"):
+        return None
+    image_bytes, mime_type = _decode_data_url(image_url)
+    suffix = mimetypes.guess_extension(mime_type) or ".png"
+    return _write_temp_file(data=image_bytes, suffix=suffix)
+
+
+def _normalise_message_content(content: Any, temp_paths: list[Path]) -> list[dict[str, str]]:
+    if isinstance(content, str):
+        return [{"type": "text", "text": content}]
+    if not isinstance(content, list):
+        return []
+
+    normalised: list[dict[str, str]] = []
+    for part in content:
+        if not isinstance(part, dict):
+            continue
+        part_type = part.get("type")
+        if part_type == "text":
+            text = str(part.get("text") or "").strip()
+            if text:
+                normalised.append({"type": "text", "text": text})
+        elif part_type == "image_url":
+            image_path = _write_image_part(part)
+            if image_path:
+                temp_paths.append(image_path)
+                normalised.append({"type": "image", "url": image_path.as_uri()})
+        elif part_type == "input_audio":
+            audio_path = _write_audio_part(part)
+            if audio_path:
+                temp_paths.append(audio_path)
+                normalised.append({"type": "audio", "url": audio_path.as_uri()})
+    return normalised
+
+
+def _build_gemma_messages(messages: list[dict[str, Any]], temp_paths: list[Path]) -> list[dict[str, Any]]:
+    gemma_messages: list[dict[str, Any]] = []
+    for message in messages:
+        role = str(message.get("role") or "user")
+        if role not in {"system", "user", "assistant"}:
+            role = "user"
+        content = _normalise_message_content(message.get("content"), temp_paths)
+        if content:
+            gemma_messages.append({"role": role, "content": content})
+    if not gemma_messages:
+        gemma_messages.append({"role": "user", "content": [{"type": "text", "text": "Respond briefly."}]})
+    return gemma_messages
+
+
+def _move_inputs_to_device(inputs: Any, model: Any):
+    target = getattr(model, "device", None)
+    dtype = getattr(model, "dtype", None)
+    if hasattr(inputs, "to") and target is not None:
+        try:
+            return inputs.to(target, dtype=dtype)
+        except TypeError:
+            return inputs.to(target)
+    if isinstance(inputs, dict):
+        return {key: value.to(target) if target is not None and hasattr(value, "to") else value for key, value in inputs.items()}
+    return inputs
 
 
 @app.get("/health")
 def health():
+    status = _dependency_status()
     return {
-        "ok": True,
+        "ok": status["ok"],
         "model_dir_exists": DEFAULT_MODEL_DIR.exists(),
         "model_dir": str(DEFAULT_MODEL_DIR),
         "model_id": DEFAULT_MODEL_ID,
-        "dependencies_available": bool(AutoProcessor and torch and (AutoModelForMultimodalLM or AutoModelForCausalLM)),
+        "dependencies": status,
     }
 
 
 @app.get("/v1/models")
 def list_models():
+    status = _dependency_status()
     return {
         "object": "list",
+        "ready": status["ok"],
         "data": [
             {
                 "id": DEFAULT_MODEL_ID,
@@ -121,46 +224,37 @@ def list_models():
                 "owned_by": "local",
                 "model_dir": str(DEFAULT_MODEL_DIR),
                 "model_dir_exists": DEFAULT_MODEL_DIR.exists(),
+                "supports_audio_input": status["ok"],
+                "supports_image_input": status["ok"],
             }
         ],
+        "diagnostics": status,
     }
 
 
 @app.post("/v1/chat/completions")
 def chat_completions(request: ChatCompletionRequest):
+    temp_paths: list[Path] = []
     try:
         processor, model = _load_model(request.model)
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-    prompt, media_parts = _extract_prompt_and_media(request.messages)
-    audio_paths: list[Path] = []
-    try:
-        conversation: list[dict[str, Any]] = [{"role": "user", "content": []}]
-        for part in media_parts:
-            if part.get("type") == "input_audio":
-                audio_path = _write_audio_part(part)
-                if audio_path:
-                    audio_paths.append(audio_path)
-                    conversation[0]["content"].append({"type": "audio", "url": str(audio_path)})
-        conversation[0]["content"].append({"type": "text", "text": prompt})
-
+        gemma_messages = _build_gemma_messages(request.messages, temp_paths)
         inputs = processor.apply_chat_template(
-            conversation,
+            gemma_messages,
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
         )
-        inputs = _move_inputs_to_device(inputs, model.device)
-        output = model.generate(**inputs, max_new_tokens=request.max_tokens, do_sample=request.temperature > 0, temperature=max(request.temperature, 0.01))
-        generated_ids = output[:, inputs["input_ids"].shape[-1] :]
-        decoded = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0].strip()
-        if hasattr(processor, "parse_response"):
-            try:
-                decoded = processor.parse_response(decoded).get("content", decoded).strip()
-            except Exception:
-                pass
+        inputs = _move_inputs_to_device(inputs, model)
+        input_len = inputs["input_ids"].shape[-1]
+        output = model.generate(
+            **inputs,
+            max_new_tokens=request.max_tokens,
+            do_sample=request.temperature > 0,
+            temperature=max(request.temperature, 0.01),
+            cache_implementation="static",
+        )
+        decoded = processor.decode(output[0][input_len:], skip_special_tokens=True).strip()
         return {
             "choices": [
                 {
@@ -170,8 +264,16 @@ def chat_completions(request: ChatCompletionRequest):
                 }
             ]
         }
+    except Exception as exc:
+        detail = {
+            "error": f"{type(exc).__name__}: {exc}",
+            "model": request.model,
+            "model_dir": str(DEFAULT_MODEL_DIR),
+            "dependencies": _dependency_status(),
+        }
+        raise HTTPException(status_code=503, detail=detail) from exc
     finally:
-        for path in audio_paths:
+        for path in temp_paths:
             try:
                 path.unlink(missing_ok=True)
             except Exception:

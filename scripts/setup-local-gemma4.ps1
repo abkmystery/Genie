@@ -21,7 +21,25 @@ Write-Host "Target: $modelDirAbs"
 
 & $Python "-$PythonVersion" -m pip install --upgrade pip
 & $Python "-$PythonVersion" -m pip install -r (Join-Path $runnerDir "requirements.txt")
+Write-Host "Installing latest Hugging Face Transformers with Gemma 4 multimodal support..." -ForegroundColor Cyan
+& $Python "-$PythonVersion" -m pip install --upgrade --force-reinstall "transformers @ git+https://github.com/huggingface/transformers.git"
 & $Python "-$PythonVersion" -m pip install "huggingface_hub[cli]"
+
+$verifyScript = @'
+import importlib.metadata as metadata
+import sys
+
+try:
+    import transformers
+    from transformers import AutoModelForMultimodalLM, AutoProcessor
+except Exception as exc:
+    raise SystemExit(f"Gemma 4 Transformers verification failed: {type(exc).__name__}: {exc}")
+
+print("Transformers:", metadata.version("transformers"))
+print("Gemma 4 multimodal class:", AutoModelForMultimodalLM.__name__)
+print("AutoProcessor:", AutoProcessor.__name__)
+'@
+& $Python "-$PythonVersion" -c $verifyScript
 
 New-Item -ItemType Directory -Force -Path $modelDirAbs | Out-Null
 & $Python "-$PythonVersion" -m huggingface_hub.commands.huggingface_cli download $ModelId --local-dir $modelDirAbs --local-dir-use-symlinks False

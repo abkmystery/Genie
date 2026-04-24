@@ -14,7 +14,7 @@
     "typecheck:desktop": "npm run typecheck --workspace @genie/desktop",
     "build:contracts": "npm run build --workspace @genie/contracts",
     "build:backend": "powershell -ExecutionPolicy Bypass -File scripts/build-backend.ps1",
-    "test:backend": "py -3.11 -m pytest services/local-api/tests && py -3.11 -m pytest services/demo-gateway/tests",
+    "test:backend": "py -3.11 -m pytest services/local-api/tests && py -3.11 -m pytest services/demo-gateway/tests && py -3.11 -m pytest services/local-gemma-runner/tests",
     "dev:api": "py -3.11 -m uvicorn app.main:app --app-dir services/local-api --reload --host 127.0.0.1 --port 8765",
     "dev:gateway": "py -3.11 -m uvicorn app.main:app --app-dir services/demo-gateway --reload --host 127.0.0.1 --port 8788",
     "setup:local-gemma": "powershell -ExecutionPolicy Bypass -File scripts/setup-local-gemma4.ps1",

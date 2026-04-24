@@ -20,7 +20,7 @@ This repo is intentionally split into a few replaceable parts:
 Genie is designed to score well on the things that usually separate winning hackathon submissions from generic assistants:
 
 - Real utility: it helps a user understand the screen they are already on, not a disconnected toy workflow.
-- Strong Gemma 4 fit: demo mode uses hosted Gemma 4, and local mode now supports edge-friendly Gemma 4 E4B.
+- Strong Gemma 4 fit: demo mode uses hosted Gemma 4, and local mode supports edge-friendly Gemma 4 E4B/E2B through an OpenAI-compatible runner.
 - Privacy-first UX: local API boundary, local file grounding, and local model support reduce unnecessary data exposure.
 - Multimodal grounding: answers and guidance use screenshots, selected regions, OCR, attachments, and structured evidence.
 - Polished user experience: launcher, drawer UI, citations, debug panel, settings, activity tracking, and guided overlays.
@@ -51,7 +51,7 @@ Genie is intentionally aligned with the strengths Google called out for Gemma 4:
 Current recommended profiles:
 
 - `demo`: hosted Gemma 4 for the smoothest public demo path
-- `local`: Gemma 4 E4B through the bundled local runner path for edge-style local testing
+- `local`: Gemma 4 E4B through the local runner path for edge-style local testing, with E2B as the lower-memory fallback
 - `custom`: any compatible endpoint for experimentation or later production routing
 
 ## Guided Task Mode
@@ -112,13 +112,17 @@ If PowerShell blocks `npm.ps1`, always use `npm.cmd`.
 - Desktop typecheck: `npm.cmd run typecheck --workspace @genie/desktop`
 - Contracts build: `npm.cmd run build --workspace @genie/contracts`
 - Backend tests: `py -3.11 -m pytest services/local-api/tests && py -3.11 -m pytest services/demo-gateway/tests`
+- Local Gemma 4 setup: `npm.cmd run setup:local-gemma`
+- Local Gemma 4 runner: `npm.cmd run dev:local-gemma`
 - Root build: `npm.cmd run build`
 
 ## Profiles
 
 - `demo`: uses bundled/remote demo credential file when available, otherwise offline fallback.
-- `local`: user enters endpoint + optional token + model in the setup wizard or Settings. The recommended local setup is `google/gemma-4-E4B-it`.
+- `local`: user enters endpoint + optional token + model in the setup wizard or Settings. The recommended endpoint is `http://127.0.0.1:8766/v1`; the recommended local model is `google/gemma-4-E4B-it`.
 - `custom`: user enters endpoint + optional token + model in the setup wizard or Settings; nothing requires a source edit.
+
+For local Gemma 4, see [docs/local-gemma.md](docs/local-gemma.md). The runner verifies `AutoModelForMultimodalLM` before startup because older Transformers installs can expose `/v1/models` but still fail on audio/image chat requests.
 
 Profile precedence on startup:
 
