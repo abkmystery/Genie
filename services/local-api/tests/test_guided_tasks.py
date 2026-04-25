@@ -342,6 +342,28 @@ def test_guidance_screen_state_prioritizes_kaggle_filter_step_on_filter_page(tmp
     assert indexes[0] == 2
 
 
+def test_guidance_screen_signature_detects_resolution_change(tmp_path: Path):
+    from app.domain.guidance_screen_state import GuidanceScreenStateAnalyzer
+
+    analyzer = GuidanceScreenStateAnalyzer()
+    first = _image_screen_context(tmp_path, name="first-resolution", color=(30, 90, 160), text="")
+    second_path = tmp_path / "second-resolution.png"
+    Image.new("RGB", (320, 180), color=(30, 90, 160)).save(second_path)
+    second_capture = ScreenCaptureRef(
+        id="second-resolution",
+        path=str(second_path),
+        width=320,
+        height=180,
+        mode="simulated",
+        captured_at=datetime.now(timezone.utc),
+        ocr_text="",
+        summary="second screen",
+    )
+    second = ScreenContext(capture=second_capture, text="", summary="second screen")
+
+    assert analyzer.has_screen_changed(analyzer.screen_signature(first), analyzer.screen_signature(second)) is True
+
+
 def test_step_progress_detector_conservative_behavior():
     detector = StepProgressDetector()
     step = GuidedTaskStep(
@@ -948,6 +970,87 @@ def test_guided_observe_prefers_reanchoring_before_replan(tmp_path: Path):
     assert observed.current_step is not None
     assert observed.current_step.step_id == "2"
     assert observed.overlay_target is not None
+    assert len(planner_calls) == 1
+
+
+def test_guided_observe_clears_overlay_when_user_leaves_task_context(tmp_path: Path):
+    trace = TraceService(SQLiteTraceLogger(Database(tmp_path / "guided-unrelated.db")))
+    orchestrator = GuidanceOrchestrator(
+        session_manager=GuidedTaskSessionManager(),
+        planner=TaskPlanner(),
+        grounder=TargetGrounder(type("Registry", (), {"demo_resolver": None, "credential_store": type("Store", (), {"get": lambda self, provider_id: {}})()})()),
+        progress_detector=StepProgressDetector(),
+        recovery_policy=RecoveryPolicy(),
+        trace_logger=GuidedTaskTraceLogger(trace),
+    )
+
+    planner_calls: list[str] = []
+
+    async def _planner(**kwargs):
+        planner_calls.append(kwargs["screen_context"].text)
+        return GuidedTaskPlan(
+            title="Kaggle flow",
+            goal=kwargs["goal"],
+            estimated_steps=3,
+            steps=[
+                GuidedTaskStep(step_id="1", order_index=0, instruction_text="Open Kaggle", target_description="address bar", completion_hint="Kaggle is open", grounding_required=True),
+                GuidedTaskStep(step_id="2", order_index=1, instruction_text="Open competitions", target_description="Competitions", completion_hint="Competitions page is open", grounding_required=True),
+                GuidedTaskStep(step_id="3", order_index=2, instruction_text="Click Filters", target_description="Filters", completion_hint="Filters panel is open", grounding_required=True),
+            ],
+        )
+
+    async def _ground(**kwargs):
+        step = kwargs["step"]
+        return GroundingResult(
+            success=True,
+            confidence=0.9,
+            bbox=OverlayTarget(x=40, y=40, width=120, height=30, target_label=step.target_description, render_style="arrow_pulse"),
+            target_label=step.target_description,
+            reason="Matched test target.",
+        )
+
+    orchestrator.planner.plan = _planner  # type: ignore[method-assign]
+    orchestrator.grounder.ground = _ground  # type: ignore[method-assign]
+    profile = ProviderConfig(
+        id="demo",
+        display_name="Demo",
+        description="Demo",
+        transport="mock",
+        backend_base_url="http://127.0.0.1",
+        model_name="stub",
+        capabilities=ProviderCapabilities(),
+    )
+    started = __import__("asyncio").run(
+        orchestrator.start(
+            goal="Guide me to high prize competitions on Kaggle",
+            conversation_id="conv-1",
+            screen_context=_screen_context(tmp_path, text="Browser new tab search"),
+            region_context=None,
+            evidence=[],
+            profile=profile,
+            provider=_StubPlannerProvider(),
+            max_steps=5,
+            overlay_style="arrow_pulse",
+        )
+    )
+    assert started.status is not None
+    orchestrator.session_manager.jump_to(1)
+
+    observed = __import__("asyncio").run(
+        orchestrator.observe(
+            screen_context=_screen_context(tmp_path, text="Codex editor terminal source code"),
+            region_context=None,
+            profile=profile,
+            provider=_StubPlannerProvider(),
+            completion_mode="conservative",
+            auto_advance_sensitivity=0.85,
+            overlay_style="arrow_pulse",
+        )
+    )
+
+    assert observed.session is not None
+    assert observed.session.status == "needs_attention"
+    assert observed.overlay_target is None
     assert len(planner_calls) == 1
 
 

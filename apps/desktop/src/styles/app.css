@@ -21,6 +21,15 @@
 body {
   margin: 0;
   background: transparent;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
 }
 
 button,
@@ -139,6 +148,10 @@ select {
 .panel {
   width: 100%;
   height: 100vh;
+  max-width: 100vw;
+  max-height: 100vh;
+  min-width: 0;
+  min-height: 0;
   position: relative;
   border-radius: 22px;
   background: var(--panel-bg);
@@ -147,6 +160,7 @@ select {
   overflow: hidden;
   display: grid;
   grid-template-rows: auto auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr);
   backdrop-filter: blur(20px);
 }
 
@@ -174,6 +188,7 @@ select {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   border-bottom: 1px solid var(--border);
   -webkit-app-region: drag;
 }
@@ -196,6 +211,7 @@ select {
   font-weight: 700;
   letter-spacing: 0.02em;
   color: #11243b;
+  line-height: 1.08;
 }
 
 .eyebrow {
@@ -213,6 +229,7 @@ select {
 
 .tab-bar {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   border-bottom: 1px solid var(--border);
 }
@@ -257,6 +274,8 @@ select:focus-visible {
 .tab-section {
   padding: 16px 18px;
   overflow: auto;
+  min-width: 0;
+  min-height: 0;
 }
 
 .tab-section.chat-tab {
@@ -294,6 +313,7 @@ select:focus-visible {
   display: flex;
   gap: 10px;
   align-items: center;
+  min-width: 0;
 }
 
 .section-header {
@@ -318,6 +338,7 @@ select:focus-visible {
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.84);
   box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+  overflow-wrap: anywhere;
 }
 
 .message-card.user {
@@ -350,6 +371,7 @@ select:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-width: 0;
 }
 
 .attachment-strip {
@@ -454,6 +476,8 @@ select:focus-visible {
 .field input,
 .field textarea,
 .field select {
+  width: 100%;
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 12px;
@@ -467,6 +491,7 @@ select:focus-visible {
 
 .composer-footer {
   justify-content: space-between;
+  flex-wrap: wrap;
 }
 
 .source-list,
@@ -485,6 +510,8 @@ select:focus-visible {
   background: rgba(255, 255, 255, 0.86);
   border-radius: 12px;
   padding: 14px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .diagnostics-output {
@@ -729,5 +756,24 @@ select:focus-visible {
   .section-header,
   .inline-actions {
     flex-wrap: wrap;
+  }
+
+  .panel-header,
+  .tab-bar,
+  .tab-section,
+  .panel-footer {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .panel-header h1 {
+    font-size: 1.55rem;
+  }
+
+  .tab-bar button,
+  .inline-actions button,
+  .composer-footer button,
+  .settings-grid button {
+    padding: 8px 10px;
   }
 }

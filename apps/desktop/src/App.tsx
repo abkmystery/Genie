@@ -22,6 +22,7 @@ import {
   formatActivityTimer,
   formatSeconds,
   looksLikeBase64Audio,
+  normalizeMicTranscript,
   sanitizeSpeechText,
   startBrowserSpeechRecognition,
   startWavRecording,
@@ -425,14 +426,12 @@ export default function App() {
     const userMessage: MessageItem = { id: crypto.randomUUID(), role: "user", text: goal.trim() };
     setMessages((previous) => [...previous, userMessage]);
     try {
-      const payload = await withScreenCaptureHidden(() =>
-        api.startGuidedTask({
-          prompt: resolvedGoal,
-          conversationId: conversationId,
-          sourceIds: sources.map((source) => source.id),
-          regionSelection: regionContext?.selection ?? null,
-        }),
-      );
+      const payload = await api.startGuidedTask({
+        prompt: resolvedGoal,
+        conversationId: conversationId,
+        sourceIds: sources.map((source) => source.id),
+        regionSelection: regionContext?.selection ?? null,
+      });
       if (!payload.ok || !payload.status) {
         throw new Error(payload.message || "Guidance could not start.");
       }
@@ -565,7 +564,9 @@ export default function App() {
         transcriptionError = transcription.error ?? "";
       }
       if (next) {
-        setPrompt(next);
+        const normalized = normalizeMicTranscript(next);
+        setPrompt(normalized);
+        await handleSend(normalized);
       } else if (transcriptionError) {
         setError(`Mic could not transcribe that audio. ${transcriptionError}`);
       } else {
@@ -606,18 +607,15 @@ export default function App() {
     action: "mark_done" | "next_step" | "pause" | "resume" | "rescan" | "cant_find_it",
   ) => {
     await clearGuidanceOverlay();
-    const capturesScreen = action === "mark_done" || action === "next_step" || action === "rescan";
-    const status = capturesScreen
-      ? await withScreenCaptureHidden(() => api.actOnGuidedTask({ action, session_id: guidedStatus?.session?.id ?? null }))
-      : await api.actOnGuidedTask({ action, session_id: guidedStatus?.session?.id ?? null });
+    const status = await api.actOnGuidedTask({ action, session_id: guidedStatus?.session?.id ?? null });
     setGuidedStatus(status);
   };
 
-  const handleSend = async () => {
-    if (!prompt.trim()) {
+  async function handleSend(overridePrompt?: string) {
+    const outgoingPrompt = (overridePrompt ?? prompt).trim();
+    if (!outgoingPrompt) {
       return;
     }
-    const outgoingPrompt = prompt.trim();
     if (isGuidancePrompt(outgoingPrompt)) {
       await startGuidance(outgoingPrompt);
       return;
@@ -629,16 +627,14 @@ export default function App() {
     setMessages((previous) => [...previous, userMessage]);
 
     try {
-      const payload = await withScreenCaptureHidden(() =>
-        api.chat({
-          prompt: outgoingPrompt,
-          use_current_screen: settings?.screen_share_enabled !== false,
-          use_region: Boolean(regionContext),
-          region_selection: regionContext?.selection ?? null,
-          source_ids: sources.map((source) => source.id),
-          conversation_id: conversationId,
-        }),
-      );
+      const payload = await api.chat({
+        prompt: outgoingPrompt,
+        use_current_screen: settings?.screen_share_enabled !== false,
+        use_region: Boolean(regionContext),
+        region_selection: regionContext?.selection ?? null,
+        source_ids: sources.map((source) => source.id),
+        conversation_id: conversationId,
+      });
       const assistantMessage: MessageItem = {
         id: crypto.randomUUID(),
         role: "assistant",
@@ -660,7 +656,7 @@ export default function App() {
       setLoading(false);
       setActiveTab("chat");
     }
-  };
+  }
 
   return (
     <div className={`shell ${isOpen ? "open" : "closed"}`}>

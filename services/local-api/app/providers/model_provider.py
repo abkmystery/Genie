@@ -95,9 +95,18 @@ class OpenAICompatibleHttpModelProvider(ModelProvider):
         base_url = (profile.endpoint_override or profile.backend_base_url or "").rstrip("/")
         token = (self.credentials.get("token") or "").strip()
         if not base_url:
+            if profile.id == "demo":
+                return GatewayChatResponse(
+                    answer=fallback_grounded_answer(prompt, evidence, screen_context, region_context),
+                    provider_used=f"{profile.id}:openai-fallback",
+                )
             return GatewayChatResponse(
-                answer=fallback_grounded_answer(prompt, evidence, screen_context, region_context),
-                provider_used=f"{profile.id}:openai-missing-config",
+                answer=_provider_error_answer(
+                    profile=profile,
+                    base_url=base_url,
+                    error="No endpoint is configured for this profile.",
+                ),
+                provider_used=f"{profile.id}:openai-config-error",
             )
 
         payload = build_openai_compatible_payload(
@@ -117,10 +126,15 @@ class OpenAICompatibleHttpModelProvider(ModelProvider):
         try:
             answer = await client.chat_completions(payload)
             return GatewayChatResponse(answer=answer or "(empty response)", provider_used=f"{profile.id}:openai-compatible")
-        except Exception:
+        except Exception as exc:
+            if profile.id == "demo":
+                return GatewayChatResponse(
+                    answer=fallback_grounded_answer(prompt, evidence, screen_context, region_context),
+                    provider_used=f"{profile.id}:openai-fallback",
+                )
             return GatewayChatResponse(
-                answer=fallback_grounded_answer(prompt, evidence, screen_context, region_context),
-                provider_used=f"{profile.id}:openai-fallback",
+                answer=_provider_error_answer(profile=profile, base_url=base_url, error=_describe_provider_error(exc)),
+                provider_used=f"{profile.id}:openai-error",
             )
 
 
@@ -174,3 +188,26 @@ class DemoModelProvider(ModelProvider):
             )
 
         return GatewayChatResponse(answer=answer or "(empty response)", provider_used=f"demo:{status.source}:{status.model}")
+
+
+def _describe_provider_error(exc: Exception) -> str:
+    if isinstance(exc, httpx.HTTPStatusError):
+        response_text = (exc.response.text or "").strip()
+        if len(response_text) > 320:
+            response_text = f"{response_text[:320]}..."
+        suffix = f" Response: {response_text}" if response_text else ""
+        return f"HTTP {exc.response.status_code} from model endpoint.{suffix}"
+    return f"{exc.__class__.__name__}: {exc}"
+
+
+def _provider_error_answer(*, profile: ProviderConfig, base_url: str, error: str) -> str:
+    profile_name = profile.display_name or profile.id
+    endpoint_label = base_url or "(not configured)"
+    return (
+        f"I could not reach the {profile_name} model endpoint, so I can't answer with the local model yet.\n\n"
+        f"Endpoint: {endpoint_label}\n"
+        f"Model: {profile.model_name or '(not configured)'}\n"
+        f"Problem: {error}\n\n"
+        "Please make sure the local model server is running, the endpoint points to its OpenAI-compatible base URL, "
+        "and the selected model is loaded. I did not use the generic screen fallback for this response."
+    )

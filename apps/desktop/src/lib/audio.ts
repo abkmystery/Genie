@@ -66,6 +66,27 @@ export function sanitizeSpeechText(value: string): string {
     .trim();
 }
 
+export function normalizeMicTranscript(value: string): string {
+  let text = value.trim().replace(/\s+/g, " ");
+  if (!text) {
+    return "";
+  }
+
+  // Common STT homophones for query-style prompts. Keep this intentionally
+  // small so the assistant corrects obvious intent without rewriting users.
+  const replacements: Array<[RegExp, string]> = [
+    [/\bgold right\b/gi, "gold rate"],
+    [/\bsilver right\b/gi, "silver rate"],
+    [/\binterest right\b/gi, "interest rate"],
+    [/\bmortgage right\b/gi, "mortgage rate"],
+    [/\bexchange right\b/gi, "exchange rate"],
+  ];
+  for (const [pattern, replacement] of replacements) {
+    text = text.replace(pattern, replacement);
+  }
+  return text;
+}
+
 export function startBrowserSpeechRecognition({
   maxSeconds,
   onProgress,

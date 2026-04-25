@@ -177,6 +177,30 @@ class GuidanceOrchestrator:
         previous_screen_signature = self.session_manager.previous_screen_signature()
         current_screen_signature = self.screen_state_analyzer.screen_signature(screen_context)
         screen_changed = self.screen_state_analyzer.has_screen_changed(previous_screen_signature, current_screen_signature)
+        if self.screen_state_analyzer.is_likely_unrelated_after_progress(
+            goal=status.session.goal,
+            screen_context=screen_context,
+            current_step_index=status.session.current_step_index,
+            steps=status.plan.steps if status.plan else [],
+        ):
+            recovery_options = [
+                "Switch back to the relevant page or app, then click Re-scan.",
+                "If the task changed, stop guidance and start a new guide request.",
+            ]
+            updated = self.session_manager.update(
+                clear_grounding=True,
+                status="needs_attention",
+                recovery_options=recovery_options,
+                previous_screen_text=screen_context.text,
+                previous_screen_signature=current_screen_signature,
+            )
+            self.trace_logger.emit(
+                status.session.trace_id,
+                "STEP_GROUNDING_FAILED",
+                "Current screen no longer appears related to the guided task",
+                {"goal": status.session.goal, "step_index": status.session.current_step_index},
+            )
+            return updated
         progress = self.progress_detector.detect(
             step=status.current_step,
             grounding=status.latest_grounding,
@@ -261,6 +285,29 @@ class GuidanceOrchestrator:
             if not status.session or status.current_step is None or status.plan is None:
                 return status
         current_step_index = status.session.current_step_index
+        if self.screen_state_analyzer.is_likely_unrelated_after_progress(
+            goal=status.session.goal,
+            screen_context=screen_context,
+            current_step_index=current_step_index,
+            steps=status.plan.steps if status.plan else [],
+        ):
+            updated = self.session_manager.update(
+                clear_grounding=True,
+                status="needs_attention",
+                recovery_options=[
+                    "Switch back to the relevant page or app, then click Re-scan.",
+                    "If the task changed, stop guidance and start a new guide request.",
+                ],
+                previous_screen_text=screen_context.text,
+                previous_screen_signature=self.screen_state_analyzer.screen_signature(screen_context),
+            )
+            self.trace_logger.emit(
+                status.session.trace_id,
+                "STEP_GROUNDING_FAILED",
+                "Guidance paused because the current screen is unrelated to the task",
+                {"goal": status.session.goal, "step_index": current_step_index},
+            )
+            return updated
 
         candidate_indexes = self.screen_state_analyzer.candidate_step_indexes(
             screen_context=screen_context,

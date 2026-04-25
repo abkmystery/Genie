@@ -28,7 +28,7 @@ class GuidanceScreenStateAnalyzer:
                 # video-frame changes.
                 grayscale = image.convert("L").resize((32, 18))
                 quantized = bytes(min(15, max(0, pixel // 16)) for pixel in grayscale.getdata())
-                return f"vhash:{quantized.hex()}"
+                return f"vhash:{screen_context.capture.width}x{screen_context.capture.height}:{quantized.hex()}"
         except Exception:
             text = f"{screen_context.summary}\n{screen_context.text}".strip()
             if text:
@@ -40,8 +40,14 @@ class GuidanceScreenStateAnalyzer:
             return False
         if previous_signature.startswith("vhash:") and current_signature.startswith("vhash:"):
             try:
-                previous = bytes.fromhex(previous_signature.split(":", 1)[1])
-                current = bytes.fromhex(current_signature.split(":", 1)[1])
+                previous_parts = previous_signature.split(":", 2)
+                current_parts = current_signature.split(":", 2)
+                if len(previous_parts) == 3 and len(current_parts) == 3 and previous_parts[1] != current_parts[1]:
+                    return True
+                previous_hex = previous_parts[-1]
+                current_hex = current_parts[-1]
+                previous = bytes.fromhex(previous_hex)
+                current = bytes.fromhex(current_hex)
             except ValueError:
                 return previous_signature != current_signature
             if len(previous) != len(current):
@@ -86,6 +92,47 @@ class GuidanceScreenStateAnalyzer:
             return True
         best_overlap = max(self._step_overlap_signal(step=step, screen_terms=screen_terms) for step in steps)
         return best_overlap <= 0
+
+    def is_likely_unrelated_after_progress(
+        self,
+        *,
+        goal: str,
+        screen_context: ScreenContext,
+        current_step_index: int,
+        steps: Sequence[GuidedTaskStep] = (),
+    ) -> bool:
+        """Conservatively detect when the user left the task context.
+
+        Step 0 is allowed to navigate toward the task. After that, if none of
+        the meaningful goal terms are visible, keeping an overlay active is more
+        harmful than helpful because it points at unrelated apps.
+        """
+
+        if current_step_index <= 0:
+            return False
+        goal_terms = terms(goal) - {
+            "guide",
+            "help",
+            "show",
+            "through",
+            "step",
+            "steps",
+            "click",
+            "open",
+            "find",
+            "check",
+            "highest",
+            "best",
+            "next",
+        }
+        if not goal_terms:
+            return False
+        screen_terms = terms(f"{screen_context.summary} {screen_context.text}")
+        if not screen_terms:
+            return False
+        if any(self._step_overlap_signal(step=step, screen_terms=screen_terms) > 0 for step in steps):
+            return False
+        return not bool(goal_terms & screen_terms)
 
     def should_refresh_grounding(
         self,

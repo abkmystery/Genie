@@ -55,8 +55,13 @@ function clamp(value: number, min: number, max: number) {
 }
 
 function computeBounds(open: boolean, current?: Electron.Rectangle) {
-  const size = open ? panelSize : LAUNCHER_SIZE;
   const display = current ? screen.getDisplayMatching(current).workArea : screen.getPrimaryDisplay().workArea;
+  const requestedSize = open ? panelSize : LAUNCHER_SIZE;
+  const margin = open ? 8 : 0;
+  const size = {
+    width: Math.min(requestedSize.width, Math.max(LAUNCHER_SIZE.width, display.width - margin)),
+    height: Math.min(requestedSize.height, Math.max(LAUNCHER_SIZE.height, display.height - margin)),
+  };
 
   const anchorX = current ? current.x + current.width : display.x + display.width - 24;
   const anchorY = current ? current.y + current.height : display.y + display.height - 24;
@@ -90,6 +95,19 @@ function normalizeGuidancePayload(payload: GuidancePayload): GuidancePayload {
       height: Math.max(18, Math.round(target.height * scaleY)),
     },
   };
+}
+
+function clearGuidanceOverlayWindow() {
+  currentGuidanceOverlay = null;
+  if (guidanceWindow && !guidanceWindow.isDestroyed()) {
+    guidanceWindow.close();
+    guidanceWindow = null;
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setAlwaysOnTop(true, "screen-saver");
+    mainWindow.showInactive();
+    mainWindow.moveTop();
+  }
 }
 
 async function createWindow() {
@@ -246,15 +264,7 @@ async function ensureGuidanceWindow(bounds: Electron.Rectangle) {
 ipcMain.handle("genie:set-guidance-overlay", async (_event, payload) => {
   currentGuidanceOverlay = payload ? normalizeGuidancePayload(payload) : null;
   if (!payload) {
-    if (guidanceWindow) {
-      guidanceWindow.close();
-      guidanceWindow = null;
-    }
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.setAlwaysOnTop(true, "screen-saver");
-      mainWindow.showInactive();
-      mainWindow.moveTop();
-    }
+    clearGuidanceOverlayWindow();
     return;
   }
 
@@ -342,6 +352,14 @@ app.whenReady().then(() => {
       return;
     }
     callback(false);
+  });
+
+  screen.on("display-metrics-changed", () => {
+    appendElectronLog("display metrics changed; clearing guidance overlay and fitting panel to screen");
+    clearGuidanceOverlayWindow();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setBounds(computeBounds(mainWindow.getBounds().width > LAUNCHER_SIZE.width, mainWindow.getBounds()), true);
+    }
   });
 });
 
