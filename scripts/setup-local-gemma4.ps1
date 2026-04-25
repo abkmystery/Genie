@@ -39,7 +39,13 @@ print("Transformers:", metadata.version("transformers"))
 print("Gemma 4 multimodal class:", AutoModelForMultimodalLM.__name__)
 print("AutoProcessor:", AutoProcessor.__name__)
 '@
-& $Python "-$PythonVersion" -c $verifyScript
+$verifyPath = Join-Path ([System.IO.Path]::GetTempPath()) "genie-setup-verify-local-gemma.py"
+Set-Content -LiteralPath $verifyPath -Value $verifyScript -Encoding UTF8
+try {
+  & $Python "-$PythonVersion" $verifyPath
+} finally {
+  Remove-Item -LiteralPath $verifyPath -Force -ErrorAction SilentlyContinue
+}
 
 New-Item -ItemType Directory -Force -Path $modelDirAbs | Out-Null
 & $Python "-$PythonVersion" -m huggingface_hub.commands.huggingface_cli download $ModelId --local-dir $modelDirAbs --local-dir-use-symlinks False

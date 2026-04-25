@@ -38,6 +38,12 @@ except Exception as exc:
         f"Details: {type(exc).__name__}: {exc}"
     )
 '@
-& $Python "-$PythonVersion" -c $verifyScript
+$verifyPath = Join-Path ([System.IO.Path]::GetTempPath()) "genie-verify-local-gemma.py"
+Set-Content -LiteralPath $verifyPath -Value $verifyScript -Encoding UTF8
+try {
+  & $Python "-$PythonVersion" $verifyPath
+} finally {
+  Remove-Item -LiteralPath $verifyPath -Force -ErrorAction SilentlyContinue
+}
 
 & $Python "-$PythonVersion" -m uvicorn app:app --app-dir services/local-gemma-runner --host 127.0.0.1 --port 8766
