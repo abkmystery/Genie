@@ -279,6 +279,52 @@ def test_target_grounder_uses_kaggle_competitions_sidebar_heuristic(tmp_path: Pa
     assert result.bbox.x < 80
 
 
+def test_target_grounder_merges_ocr_words_into_phrase_targets(tmp_path: Path, monkeypatch):
+    class _Registry:
+        demo_resolver = None
+        credential_store = type("Store", (), {"get": lambda self, provider_id: {}})()
+
+    grounder = TargetGrounder(_Registry())
+    monkeypatch.setattr(
+        grounder,
+        "_extract_ocr_boxes",
+        lambda _path: [
+            {"text": "Recommended", "left": 420, "top": 84, "width": 118, "height": 24},
+            {"text": "Charts", "left": 546, "top": 84, "width": 62, "height": 24},
+            {"text": "Data", "left": 120, "top": 210, "width": 44, "height": 22},
+        ],
+    )
+    step = GuidedTaskStep(
+        step_id="step-chart",
+        order_index=2,
+        instruction_text="Click Recommended Charts",
+        target_description="Recommended Charts",
+        completion_hint="Chart dialog opens",
+        grounding_required=True,
+    )
+    result = __import__("asyncio").run(
+        grounder.ground(
+            step=step,
+            screen_context=_screen_context(tmp_path, text="Insert Recommended Charts Data"),
+            profile=ProviderConfig(
+                id="demo",
+                display_name="Demo",
+                description="Demo",
+                transport="mock",
+                backend_base_url="http://127.0.0.1",
+                model_name="stub",
+                capabilities=ProviderCapabilities(),
+            ),
+            overlay_style="arrow_pulse",
+        )
+    )
+
+    assert result.success is True
+    assert result.bbox is not None
+    assert result.bbox.target_label == "Recommended Charts"
+    assert result.bbox.width >= 180
+
+
 def test_guidance_screen_state_prioritizes_kaggle_filter_step_on_filter_page(tmp_path: Path):
     from app.domain.guidance_screen_state import GuidanceScreenStateAnalyzer
 

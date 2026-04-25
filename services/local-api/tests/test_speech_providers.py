@@ -6,7 +6,7 @@ from app.main import transcribe_audio
 from app.models.contracts import SpeechToTextRequest
 from app.domain.profile_service import ProviderRegistry
 from app.providers.credential_store import FileCredentialStore
-from app.providers.speech_provider import OpenAICompatibleSpeechToTextProvider, OptionalWhisperSpeechToTextProvider, PowerShellSpeechTtsProvider, UnavailableSpeechToTextProvider
+from app.providers.speech_provider import CascadingSpeechToTextProvider, OpenAICompatibleSpeechToTextProvider, OptionalWhisperSpeechToTextProvider, PowerShellSpeechTtsProvider, UnavailableSpeechToTextProvider
 
 
 def test_speech_to_text_provider_reports_diagnostics():
@@ -59,7 +59,31 @@ def test_provider_registry_prefers_model_audio_for_local_openai_profile(tmp_path
         credentials_stored_locally=True,
     )
     provider = registry.create_speech_to_text_client(profile)
-    assert provider.diagnostics()["provider"] == "local:model-audio"
+    diagnostics = provider.diagnostics()
+    assert diagnostics["provider"] in {"cascade", "local:model-audio"}
+    if diagnostics["provider"] == "cascade":
+        assert diagnostics["providers"][0]["provider"] == "local:model-audio"
+
+
+def test_cascading_speech_provider_falls_back_to_whisper():
+    class _FailingProvider:
+        async def transcribe(self, **_kwargs):
+            raise RuntimeError("model audio failed")
+
+        def diagnostics(self):
+            return {"provider": "model-audio", "available": True, "offline": False}
+
+    class _FallbackProvider:
+        async def transcribe(self, **_kwargs):
+            return "fallback transcript"
+
+        def diagnostics(self):
+            return {"provider": "local-whisper", "available": True, "offline": True}
+
+    provider = CascadingSpeechToTextProvider([_FailingProvider(), _FallbackProvider()])
+    transcript = asyncio.run(provider.transcribe(audio_base64=base64.b64encode(b"fake-wav").decode("ascii"), audio_format="wav"))
+
+    assert transcript == "fallback transcript"
 
 
 def test_provider_registry_does_not_send_demo_audio_to_raw_provider_without_local_stt(tmp_path, monkeypatch):

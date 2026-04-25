@@ -22,6 +22,8 @@ Genie now prefers browser-native speech recognition in the desktop shell. If tha
 
 - Ensure Electron is allowed to access the microphone.
 - Check Settings diagnostics to see whether an offline STT package was detected.
+- Demo and non-audio models use the packaged offline STT helper, then send transcript text to Gemma.
+- Local/Custom endpoints using audio-native models such as Gemma 4 E2B/E4B are tried first, then Genie falls back to offline STT if the endpoint rejects audio.
 - If no local STT package is installed, browser speech recognition may still work in the desktop shell.
 
 ## Activity recording does not start
@@ -39,4 +41,4 @@ That is expected unless an explicit activity recording session was started earli
 - Use `Re-scan` to capture the current page state again.
 - Use `I can't find it` and then circle the relevant area so Genie can re-ground inside that region.
 - Make sure the relevant button, field, or label is actually visible on the current screen.
-- If OCR is weak or the control is icon-only, Genie may fall back to text-only instructions instead of guessing.
+- Genie merges OCR words into line/phrase candidates for better target boxes, but if OCR is weak or the control is icon-only, it may fall back to text-only instructions instead of guessing.

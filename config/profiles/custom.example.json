@@ -9,7 +9,7 @@
   "timeout_ms": 45000,
   "capabilities": {
     "supports_screen_input": true,
-    "supports_stt": false,
+    "supports_stt": true,
     "supports_tts": false
   },
   "credentials_required": true,

@@ -43,7 +43,7 @@ class TargetGrounder:
             return heuristic
 
         boxes = self._extract_ocr_boxes(image_path)
-        candidates = self._score_candidates(step, boxes)
+        candidates = self._score_candidates(step, self._candidate_pool(boxes))
         if candidates:
             confidence, candidate = candidates[0]
             return self._build_overlay_result(
@@ -140,10 +140,78 @@ class TargetGrounder:
             )
         return results
 
+    def _candidate_pool(self, boxes: list[dict[str, object]]) -> list[dict[str, object]]:
+        """Return individual OCR words plus merged line/phrase candidates.
+
+        Tesseract often splits a visible target like "Search competitions" or
+        "Create your own" into separate words. Matching only word boxes makes
+        guidance feel jumpy and inaccurate. Merged candidates keep coordinates
+        tied to what the user actually sees.
+        """
+
+        if not boxes:
+            return []
+
+        candidates = [dict(item, source="word") for item in boxes]
+        lines: list[list[dict[str, object]]] = []
+        for box in sorted(boxes, key=lambda item: (int(item["top"]), int(item["left"]))):
+            center_y = int(box["top"]) + (int(box["height"]) / 2)
+            placed = False
+            for line in lines:
+                line_center = sum(int(item["top"]) + (int(item["height"]) / 2) for item in line) / len(line)
+                median_height = max(10, sum(int(item["height"]) for item in line) / len(line))
+                if abs(center_y - line_center) <= max(8, median_height * 0.65):
+                    line.append(box)
+                    placed = True
+                    break
+            if not placed:
+                lines.append([box])
+
+        for line in lines:
+            ordered = sorted(line, key=lambda item: int(item["left"]))
+            segments: list[list[dict[str, object]]] = []
+            current: list[dict[str, object]] = []
+            previous_right: int | None = None
+            for item in ordered:
+                left = int(item["left"])
+                if previous_right is not None and left - previous_right > 140 and current:
+                    segments.append(current)
+                    current = []
+                current.append(item)
+                previous_right = int(item["left"]) + int(item["width"])
+            if current:
+                segments.append(current)
+
+            for segment in segments:
+                if len(segment) < 2:
+                    continue
+                candidates.append(self._merge_boxes(segment, source="line"))
+                # Sliding phrases catch labels embedded inside a longer row.
+                for size in range(2, min(5, len(segment)) + 1):
+                    for start in range(0, len(segment) - size + 1):
+                        candidates.append(self._merge_boxes(segment[start : start + size], source="phrase"))
+        return candidates
+
+    def _merge_boxes(self, boxes: list[dict[str, object]], *, source: str) -> dict[str, object]:
+        left = min(int(item["left"]) for item in boxes)
+        top = min(int(item["top"]) for item in boxes)
+        right = max(int(item["left"]) + int(item["width"]) for item in boxes)
+        bottom = max(int(item["top"]) + int(item["height"]) for item in boxes)
+        return {
+            "text": " ".join(str(item["text"]).strip() for item in boxes if str(item["text"]).strip()),
+            "left": left,
+            "top": top,
+            "width": right - left,
+            "height": bottom - top,
+            "source": source,
+        }
+
     def _score_candidates(self, step: GuidedTaskStep, boxes: list[dict[str, object]]) -> list[tuple[float, dict[str, object]]]:
         desired_terms = terms(f"{step.target_description} {step.instruction_text}")
         if not desired_terms:
             return []
+        desired_text = f"{step.target_description} {step.instruction_text}".lower()
+        wants_control = self._looks_like_control_request(desired_text)
         scored: list[tuple[float, dict[str, object]]] = []
         for candidate in boxes:
             candidate_terms = terms(str(candidate["text"]))
@@ -152,10 +220,79 @@ class TargetGrounder:
             overlap = desired_terms & candidate_terms
             if not overlap:
                 continue
-            confidence = min(0.98, 0.45 + (len(overlap) / max(1, len(desired_terms))) * 0.5)
-            scored.append((confidence, candidate))
-        scored.sort(key=lambda item: item[0], reverse=True)
+            coverage = len(overlap) / max(1, len(desired_terms))
+            precision = len(overlap) / max(1, len(candidate_terms))
+            exact_bonus = 0.16 if self._contains_phrase(str(candidate["text"]), desired_text) else 0.0
+            control_bonus = 0.12 if wants_control and self._looks_like_interactive_label(str(candidate["text"])) else 0.0
+            line_bonus = 0.08 if candidate.get("source") in {"line", "phrase"} and len(candidate_terms) > 1 else 0.0
+            size_penalty = 0.12 if int(candidate["width"]) > 900 and precision < 0.75 else 0.0
+            confidence = min(0.98, 0.38 + (coverage * 0.34) + (precision * 0.18) + exact_bonus + control_bonus + line_bonus - size_penalty)
+            decorated = self._decorate_candidate(candidate, desired_text)
+            scored.append((confidence, decorated))
+        scored.sort(key=lambda item: (item[0], -int(item[1]["width"])), reverse=True)
         return scored
+
+    def _decorate_candidate(self, candidate: dict[str, object], desired_text: str) -> dict[str, object]:
+        decorated = dict(candidate)
+        if "search" in desired_text or "input" in desired_text or "field" in desired_text:
+            decorated["pad_x"] = max(18, int(int(candidate["width"]) * 0.25))
+            decorated["pad_y"] = max(10, int(int(candidate["height"]) * 0.45))
+        elif self._looks_like_control_request(desired_text) or self._looks_like_interactive_label(str(candidate["text"])):
+            decorated["pad_x"] = max(14, int(int(candidate["width"]) * 0.18))
+            decorated["pad_y"] = max(8, int(int(candidate["height"]) * 0.35))
+        return decorated
+
+    def _contains_phrase(self, candidate_text: str, desired_text: str) -> bool:
+        candidate = " ".join(candidate_text.lower().split())
+        for phrase in re.findall(r"[a-z0-9][a-z0-9 ]{2,}", desired_text):
+            phrase = " ".join(phrase.split())
+            if len(phrase.split()) >= 2 and phrase in candidate:
+                return True
+        return False
+
+    def _looks_like_control_request(self, text: str) -> bool:
+        return any(
+            word in text
+            for word in (
+                "click",
+                "select",
+                "open",
+                "choose",
+                "press",
+                "tap",
+                "filter",
+                "search",
+                "tab",
+                "button",
+                "field",
+                "menu",
+                "dropdown",
+            )
+        )
+
+    def _looks_like_interactive_label(self, text: str) -> bool:
+        label_terms = terms(text)
+        common_controls = {
+            "add",
+            "apply",
+            "back",
+            "cancel",
+            "continue",
+            "create",
+            "done",
+            "edit",
+            "filter",
+            "filters",
+            "next",
+            "open",
+            "save",
+            "search",
+            "select",
+            "submit",
+            "tab",
+            "view",
+        }
+        return bool(label_terms & common_controls) or len(label_terms) <= 3
 
     def _heuristic_target(
         self,

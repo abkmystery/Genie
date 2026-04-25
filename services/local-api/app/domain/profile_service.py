@@ -16,6 +16,7 @@ from app.providers.model_provider import (
     OpenAICompatibleHttpModelProvider,
 )
 from app.providers.speech_provider import (
+    CascadingSpeechToTextProvider,
     MockSpeechToTextProvider,
     MockTextToSpeechProvider,
     OpenAICompatibleSpeechToTextProvider,
@@ -61,27 +62,33 @@ class ProviderRegistry:
     def create_speech_to_text_client(self, profile: ProviderConfig, credentials: dict[str, Any] | None = None):
         resolved_credentials = credentials if credentials is not None else (self.credential_store.get(profile.id) or {})
         endpoint = (profile.endpoint_override or profile.backend_base_url or "").rstrip("/")
+        whisper_provider = OptionalWhisperSpeechToTextProvider(download_root=(self.data_dir / "speech-models") if self.data_dir else None)
+        whisper_available = bool(whisper_provider.diagnostics().get("available"))
         if (
             profile.id in {"local", "custom"}
             and (profile.api_style or "genie_gateway") == "openai_compatible"
             and endpoint
-            and profile.capabilities.supports_stt
+            and (profile.capabilities.supports_stt or self._looks_audio_native_model(profile.model_name))
             and profile.model_name
         ):
-            return OpenAICompatibleSpeechToTextProvider(
+            model_audio_provider = OpenAICompatibleSpeechToTextProvider(
                 base_url=endpoint,
                 model_name=profile.model_name,
                 bearer_token=resolved_credentials.get("token"),
                 provider_label=f"{profile.id}:model-audio",
                 timeout_ms=profile.timeout_ms,
             )
+            return CascadingSpeechToTextProvider([model_audio_provider, whisper_provider]) if whisper_available else model_audio_provider
 
-        whisper_provider = OptionalWhisperSpeechToTextProvider(download_root=(self.data_dir / "speech-models") if self.data_dir else None)
-        if whisper_provider.diagnostics().get("available"):
+        if whisper_available:
             return whisper_provider
         return UnavailableSpeechToTextProvider(
             "No model-backed or offline STT provider is available. Browser speech recognition can still be used in the desktop UI."
         )
+
+    def _looks_audio_native_model(self, model_name: str | None) -> bool:
+        normalized = (model_name or "").lower()
+        return "gemma-4-e2b" in normalized or "gemma-4-e4b" in normalized or "gemma-4-edge" in normalized
 
     def create_text_to_speech_client(self, profile: ProviderConfig, credentials: dict[str, Any] | None = None):
         if self._text_to_speech_client is None:

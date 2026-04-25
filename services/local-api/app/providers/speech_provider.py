@@ -116,6 +116,44 @@ class OpenAICompatibleSpeechToTextProvider(SpeechToTextProvider):
         }
 
 
+class CascadingSpeechToTextProvider(SpeechToTextProvider):
+    def __init__(self, providers: list[SpeechToTextProvider]) -> None:
+        self.providers = providers
+
+    async def transcribe(
+        self,
+        *,
+        audio_base64: str | None = None,
+        audio_format: str | None = None,
+        transcript_hint: str | None = None,
+    ) -> str:
+        if transcript_hint:
+            return transcript_hint
+        errors: list[str] = []
+        for provider in self.providers:
+            try:
+                text = await provider.transcribe(
+                    audio_base64=audio_base64,
+                    audio_format=audio_format,
+                    transcript_hint=None,
+                )
+                if text.strip():
+                    return text.strip()
+            except Exception as exc:
+                provider_name = str(provider.diagnostics().get("provider") or provider.__class__.__name__)
+                errors.append(f"{provider_name}: {exc}")
+        raise RuntimeError("; ".join(errors) if errors else "No speech-to-text provider is configured.")
+
+    def diagnostics(self) -> dict[str, object]:
+        provider_details = [provider.diagnostics() for provider in self.providers]
+        return {
+            "provider": "cascade",
+            "available": any(bool(item.get("available")) for item in provider_details),
+            "offline": all(bool(item.get("offline")) for item in provider_details if item.get("available")),
+            "providers": provider_details,
+        }
+
+
 class OptionalWhisperSpeechToTextProvider(SpeechToTextProvider):
     def __init__(self, model_name: str = "tiny", download_root: Path | None = None) -> None:
         self._has_faster_whisper = _module_available("faster_whisper")

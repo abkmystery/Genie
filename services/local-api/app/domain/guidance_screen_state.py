@@ -121,12 +121,37 @@ class GuidanceScreenStateAnalyzer:
         position_bias = max(0.0, 0.9 - (abs(step.order_index - current_step_index) * 0.22))
         current_bias = 0.25 if step.order_index == current_step_index else 0.0
         forward_bias = 0.12 if step.order_index >= current_step_index else 0.0
-        kaggle_filter_boost = 0.0
-        if {"kaggle", "competitions"} & screen_terms and {"filter", "filters", "prize", "reward", "highest", "sort"} & step_terms:
-            kaggle_filter_boost = 2.75
-        kaggle_page_penalty = 0.0
-        if {"kaggle", "competitions"} & screen_terms and {"address", "url", "open"} & step_terms and {"filter", "filters"} & screen_terms:
-            kaggle_page_penalty = 1.5
+        visible_control_terms = {
+            "add",
+            "apply",
+            "button",
+            "chart",
+            "click",
+            "competition",
+            "competitions",
+            "continue",
+            "create",
+            "filter",
+            "filters",
+            "insert",
+            "menu",
+            "next",
+            "open",
+            "prize",
+            "save",
+            "search",
+            "select",
+            "sort",
+            "submit",
+            "tab",
+        }
+        control_boost = 1.35 * len(step_terms & screen_terms & visible_control_terms)
+        next_visible_action_boost = 0.0
+        if step.order_index > current_step_index and terms(step.target_description) & screen_terms & visible_control_terms:
+            next_visible_action_boost = 1.25
+        stale_navigation_penalty = 0.0
+        if {"address", "url"} & step_terms and len(screen_terms & visible_control_terms) >= 2:
+            stale_navigation_penalty = 1.25
         return (
             (target_overlap * 1.35)
             + (hint_overlap * 1.65)
@@ -134,8 +159,9 @@ class GuidanceScreenStateAnalyzer:
             + position_bias
             + current_bias
             + forward_bias
-            + kaggle_filter_boost
-            - kaggle_page_penalty
+            + control_boost
+            + next_visible_action_boost
+            - stale_navigation_penalty
         )
 
     def _step_overlap_signal(self, *, step: GuidedTaskStep, screen_terms: set[str]) -> int:

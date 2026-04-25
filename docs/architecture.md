@@ -25,7 +25,7 @@ Genie is a desktop-first, local-orchestration architecture built to keep the UI 
 - `ActivitySummarizer`: uses Gemma 4 26B plus timeline artifacts to produce the final step-by-step recording summary.
 - `GuidedTaskSessionManager`: holds the active guided-task session, step state, and overlay-ready status.
 - `TaskPlanner`: turns a user goal plus current screen context into a compact plan.
-- `TargetGrounder`: finds the best visible on-screen target candidate and returns a bounded overlay target.
+- `TargetGrounder`: finds the best visible on-screen target candidate using OCR words, merged line/phrase candidates, conservative heuristics, and model grounding when available.
 - `StepProgressDetector`: evaluates whether the current step is complete and defaults to conservative confirmation behavior.
 - `GuidanceOrchestrator`: coordinates planning, grounding, re-scan, recovery, and step advancement.
 - `AnswerService`: builds grounded prompts, routes to a `ModelProvider`, formats evidence, and records traces.
@@ -49,6 +49,6 @@ Genie is a desktop-first, local-orchestration architecture built to keep the UI 
 
 - Screen capture falls back to a generated simulated image if native capture is unavailable.
 - OCR falls back to metadata-only extraction if OCR tooling is unavailable.
-- STT uses a local provider chain with browser/UI fallback when no offline Python package is installed.
+- STT uses a cascade: audio-native Local/Custom model endpoint when applicable, offline packaged STT helper as fallback, and browser/UI fallback when no backend package is available.
 - TTS uses a local provider chain that prefers `pyttsx3` and falls back to Windows `System.Speech` when available.
 - Secure storage falls back to a clearly labeled dev-only local file store if OS keyring support is missing.
