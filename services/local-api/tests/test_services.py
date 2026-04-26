@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.core.database import Database
@@ -23,7 +24,7 @@ from app.domain.task_planner import TaskPlanner
 from app.domain.target_grounder import TargetGrounder
 from app.domain.trace_service import TraceService
 from app.domain.web_search_service import WebSearchService
-from app.models.contracts import ChatRequest, RegionSelection
+from app.models.contracts import ActivityFrameRef, ActivityTimeline, ChatRequest, RegionSelection, ScreenCaptureRef
 from app.providers.credential_store import FileCredentialStore
 from app.providers.activity_capture import DesktopEventCollector, ScreenFrameSampler, SessionArtifactStore
 from app.providers.ocr_provider import MetadataOCRProvider
@@ -176,6 +177,42 @@ def test_activity_session_start_stop_and_summary(tmp_path: Path):
     assert stopped.session.status in {"stopped", "completed"}
     assert stopped.summary is not None
     assert stopped.summary.steps
+
+
+def test_activity_summary_reports_only_action_changes(tmp_path: Path):
+    started_at = datetime.now(timezone.utc)
+    capture = ScreenCaptureRef(
+        id="cap-1",
+        path=str(tmp_path / "screen.png"),
+        width=1920,
+        height=1080,
+        mode="simulated",
+        captured_at=started_at,
+    )
+    timeline = ActivityTimeline(
+        session_id="activity-1",
+        started_at=started_at,
+        ended_at=started_at + timedelta(seconds=3),
+        total_frames=2,
+        representative_frames=[
+            ActivityFrameRef(
+                id="frame-1",
+                capture=capture,
+                timestamp=started_at + timedelta(seconds=1),
+                window_title="Kaggle: Competitions and Hackathons - Google Chrome",
+                ocr_text="kaggle Competitions and Hackathons Search competitions Filters Featured",
+            )
+        ],
+    )
+
+    services = build_services(tmp_path)
+    summarizer = ActivitySummarizer(services["profile_manager"], services["answer"].provider_registry)
+    steps = summarizer._heuristic_steps(timeline)
+
+    assert steps
+    assert "Kaggle: Competitions and Hackathons" in steps[0]
+    assert any("competitions filter/search area" in step for step in steps)
+    assert all("Image file" not in step and "1920x1080" not in step for step in steps)
 
 
 def test_answer_service_does_not_claim_history_without_recording(tmp_path: Path):

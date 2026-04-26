@@ -220,15 +220,35 @@ def _build_gemma_messages(messages: list[dict[str, Any]], temp_paths: list[Path]
 
 def _move_inputs_to_device(inputs: Any, model: Any):
     target = getattr(model, "device", None)
-    dtype = getattr(model, "dtype", None)
     if hasattr(inputs, "to") and target is not None:
         try:
-            return inputs.to(target, dtype=dtype)
-        except TypeError:
             return inputs.to(target)
+        except TypeError:
+            return inputs.to(device=target)
     if isinstance(inputs, dict):
         return {key: value.to(target) if target is not None and hasattr(value, "to") else value for key, value in inputs.items()}
     return inputs
+
+
+def _generate(model: Any, inputs: Any, *, max_new_tokens: int, temperature: float):
+    generation_kwargs = {
+        **inputs,
+        "max_new_tokens": max_new_tokens,
+        "do_sample": temperature > 0,
+        "temperature": max(temperature, 0.01),
+    }
+    try:
+        return model.generate(**generation_kwargs, cache_implementation="static")
+    except Exception as first_error:
+        # Some CPU/offloaded Gemma 4 setups do not support static cache. Retry
+        # once with the safest generation path before surfacing a 503.
+        try:
+            return model.generate(**generation_kwargs)
+        except Exception as second_error:
+            raise RuntimeError(
+                f"Generation failed. static-cache error: {type(first_error).__name__}: {first_error}; "
+                f"fallback error: {type(second_error).__name__}: {second_error}"
+            ) from second_error
 
 
 @app.get("/health")
@@ -317,12 +337,11 @@ def chat_completions(request: ChatCompletionRequest):
             )
             inputs = _move_inputs_to_device(inputs, model)
             input_len = inputs["input_ids"].shape[-1]
-            output = model.generate(
-                **inputs,
+            output = _generate(
+                model,
+                inputs,
                 max_new_tokens=request.max_tokens,
-                do_sample=request.temperature > 0,
-                temperature=max(request.temperature, 0.01),
-                cache_implementation="static",
+                temperature=request.temperature,
             )
             decoded = processor.decode(output[0][input_len:], skip_special_tokens=True).strip()
         return {

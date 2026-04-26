@@ -17,6 +17,8 @@ spec.loader.exec_module(runner_app)
 
 _build_gemma_messages = runner_app._build_gemma_messages
 _dependency_status = runner_app._dependency_status
+_generate = runner_app._generate
+_move_inputs_to_device = runner_app._move_inputs_to_device
 app = runner_app.app
 
 
@@ -104,3 +106,40 @@ def test_openai_image_data_url_is_converted_to_gemma_image_part():
     finally:
         for path in temp_paths:
             path.unlink(missing_ok=True)
+
+
+def test_move_inputs_to_device_does_not_force_model_dtype_on_token_ids():
+    class _Inputs:
+        def __init__(self):
+            self.calls = []
+
+        def to(self, *args, **kwargs):
+            self.calls.append((args, kwargs))
+            return self
+
+    class _Model:
+        device = "cpu"
+        dtype = "bfloat16"
+
+    inputs = _Inputs()
+    assert _move_inputs_to_device(inputs, _Model()) is inputs
+    assert inputs.calls == [(("cpu",), {})]
+
+
+def test_generate_retries_without_static_cache():
+    class _Model:
+        def __init__(self):
+            self.calls = []
+
+        def generate(self, **kwargs):
+            self.calls.append(kwargs)
+            if "cache_implementation" in kwargs:
+                raise RuntimeError("static cache unsupported")
+            return ["ok"]
+
+    model = _Model()
+    output = _generate(model, {"input_ids": "ids"}, max_new_tokens=8, temperature=0)
+
+    assert output == ["ok"]
+    assert "cache_implementation" in model.calls[0]
+    assert "cache_implementation" not in model.calls[1]
