@@ -34,7 +34,7 @@ class TaskPlanner:
         parsed = self._parse_plan(response.answer, goal=goal, max_steps=max_steps)
         if parsed is not None:
             return parsed
-        return self._fallback_plan(goal=goal, max_steps=max_steps)
+        return self._fallback_plan(goal=goal, screen_context=screen_context, max_steps=max_steps)
 
     def _build_prompt(
         self,
@@ -92,6 +92,8 @@ class TaskPlanner:
             hint = str(step.get("completion_hint") or "").strip()
             if not instruction or not target:
                 continue
+            if self._is_vague_step(instruction=instruction, target=target):
+                continue
             normalized_steps.append(
                 GuidedTaskStep(
                     step_id=str(uuid4()),
@@ -111,10 +113,13 @@ class TaskPlanner:
             steps=normalized_steps,
         )
 
-    def _fallback_plan(self, *, goal: str, max_steps: int) -> GuidedTaskPlan:
+    def _fallback_plan(self, *, goal: str, screen_context: ScreenContext | None, max_steps: int) -> GuidedTaskPlan:
         lowered = goal.lower()
+        screen_text = f"{screen_context.summary if screen_context else ''} {screen_context.text if screen_context else ''}".lower()
         fallback_steps: list[tuple[str, str, str]] = []
-        if "form" in lowered or "submit" in lowered:
+        if self._looks_like_kaggle_competition_goal(lowered):
+            fallback_steps = self._kaggle_competition_steps(screen_text)
+        elif "form" in lowered or "submit" in lowered:
             fallback_steps = [
                 ("Review the current form and locate the first required input.", "the first required field or input label", "The required field is filled in or no longer highlighted."),
                 ("Move to the next visible action that continues the form.", "the Continue, Next, or Submit control", "The form advances or a confirmation message appears."),
@@ -122,9 +127,9 @@ class TaskPlanner:
             ]
         else:
             fallback_steps = [
-                ("Find the visible area that matches your goal and focus there.", "the control, section, or button most closely related to the task", "The highlighted control has been used or the page changes."),
-                ("Complete the main visible action for this step.", "the next button, field, or menu item needed to continue", "The interface changes to the next state."),
-                ("Verify that the task moved forward successfully.", "the confirmation area, new page heading, or success indicator", "The next state is clearly visible."),
+                ("Click the most specific visible button, link, tab, or input named in your request.", "the visible label that directly matches the requested action", "The page changes or the requested control opens."),
+                ("Use the next visible control that continues the task.", "the visible Next, Continue, Apply, Search, Save, or Submit control", "The interface advances to the next state."),
+                ("Check the new page or confirmation area to verify progress.", "the new page heading or confirmation message", "The expected result is visible."),
             ]
         normalized_steps = [
             GuidedTaskStep(
@@ -149,3 +154,43 @@ class TaskPlanner:
         if len(compact) <= 72:
             return compact[:1].upper() + compact[1:]
         return f"Guided task: {compact[:68].rstrip()}..."
+
+    def _is_vague_step(self, *, instruction: str, target: str) -> bool:
+        text = f"{instruction} {target}".lower()
+        vague_markers = (
+            "visible area",
+            "focus there",
+            "matches your goal",
+            "related to the task",
+            "current focus",
+            "control, section, or button",
+            "main visible action",
+            "whatever",
+            "anything relevant",
+        )
+        return any(marker in text for marker in vague_markers)
+
+    def _looks_like_kaggle_competition_goal(self, lowered_goal: str) -> bool:
+        return "kaggle" in lowered_goal and any(term in lowered_goal for term in ("competition", "competitions", "hackathon", "prize", "prized"))
+
+    def _kaggle_competition_steps(self, screen_text: str) -> list[tuple[str, str, str]]:
+        on_competitions_page = "competitions and hackathons" in screen_text or "search competitions" in screen_text
+        on_kaggle = "kaggle" in screen_text
+        if on_competitions_page:
+            return [
+                ("Click Filters on the right side of the competition search bar.", "Filters", "The filters panel or filter options are visible."),
+                ("Choose prize or reward filters if they are available.", "Prize or reward filter", "Prize or reward options are selected or visible."),
+                ("Apply the filters or sort competitions by prize if a sort control is visible.", "Apply, Sort, or prize control", "The competition list refreshes with prize-focused results."),
+            ]
+        if on_kaggle:
+            return [
+                ("Click Competitions in Kaggle's left navigation.", "Competitions", "The Competitions and Hackathons page is visible."),
+                ("Click Filters on the competition search bar.", "Filters", "The filters panel or filter options are visible."),
+                ("Choose prize or reward filters if they are available.", "Prize or reward filter", "Prize or reward options are selected or visible."),
+            ]
+        return [
+            ("Click the browser address bar.", "address bar", "The address bar is focused."),
+            ("Type kaggle.com and press Enter.", "address bar", "Kaggle is open in the browser."),
+            ("Click Competitions in Kaggle's left navigation.", "Competitions", "The Competitions and Hackathons page is visible."),
+            ("Click Filters on the competition search bar.", "Filters", "The filters panel or filter options are visible."),
+        ]

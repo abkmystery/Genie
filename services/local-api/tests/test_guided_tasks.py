@@ -40,6 +40,14 @@ class _StubPlannerProvider:
         )
 
 
+class _VaguePlannerProvider:
+    async def answer(self, prompt, profile, evidence, screen_context=None, region_context=None, audio_base64=None, audio_format=None, additional_image_paths=None):
+        return GatewayChatResponse(
+            answer='{"title":"Vague task","steps":[{"instruction_text":"Find the visible area that matches your goal and focus there.","target_description":"the control, section, or button most closely related to the task","completion_hint":"The highlighted control has been used or the page changes.","grounding_required":true}]}',
+            provider_used="stub:vague",
+        )
+
+
 def _screen_context(tmp_path: Path, text: str = "Submit Continue Success") -> ScreenContext:
     image_path = tmp_path / "capture.png"
     image_path.write_bytes(b"png")
@@ -76,6 +84,59 @@ def _image_screen_context(tmp_path: Path, *, name: str, color: tuple[int, int, i
         summary=f"{name} screen",
     )
     return ScreenContext(capture=capture, text=text, summary=f"{name} screen")
+
+
+def test_task_planner_rejects_vague_model_plan_for_kaggle(tmp_path: Path):
+    planner = TaskPlanner()
+    profile = ProviderConfig(
+        id="demo",
+        display_name="Demo",
+        description="Demo",
+        transport="mock",
+        backend_base_url="http://127.0.0.1",
+        model_name="stub",
+        capabilities=ProviderCapabilities(),
+    )
+    plan = __import__("asyncio").run(
+        planner.plan(
+            goal="Guide me on checking highest prized competitions on kaggle",
+            screen_context=_screen_context(tmp_path, text="Genie Chat Settings Debug"),
+            region_context=None,
+            evidence=[],
+            profile=profile,
+            provider=_VaguePlannerProvider(),
+            max_steps=6,
+        )
+    )
+    assert plan.steps
+    assert "visible area" not in plan.steps[0].instruction_text.lower()
+    assert plan.steps[0].target_description == "address bar"
+
+
+def test_task_planner_starts_at_filters_when_kaggle_competitions_visible(tmp_path: Path):
+    planner = TaskPlanner()
+    profile = ProviderConfig(
+        id="demo",
+        display_name="Demo",
+        description="Demo",
+        transport="mock",
+        backend_base_url="http://127.0.0.1",
+        model_name="stub",
+        capabilities=ProviderCapabilities(),
+    )
+    plan = __import__("asyncio").run(
+        planner.plan(
+            goal="Guide me on checking highest prized competitions on kaggle",
+            screen_context=_screen_context(tmp_path, text="kaggle Competitions and Hackathons Search competitions Filters Featured"),
+            region_context=None,
+            evidence=[],
+            profile=profile,
+            provider=_VaguePlannerProvider(),
+            max_steps=6,
+        )
+    )
+    assert plan.steps[0].target_description == "Filters"
+    assert "Filters" in plan.steps[0].instruction_text
 
 
 def test_guided_intent_routing():

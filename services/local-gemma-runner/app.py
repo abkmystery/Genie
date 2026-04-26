@@ -41,6 +41,7 @@ DEFAULT_MODEL_DIR = Path(
 )
 GEMMA4_SETUP_HINT = (
     "Install a Transformers build with Gemma 4 multimodal support, then restart the runner. "
+    "If you see a NumPy 'Inf' import error, run: py -3.11 -m pip install --upgrade --force-reinstall \"numpy>=1.26,<2\". "
     "Recommended: npm.cmd run setup:local-gemma. Manual fallback: "
     "py -3.11 -m pip install --upgrade --force-reinstall "
     "\"transformers @ git+https://github.com/huggingface/transformers.git\""

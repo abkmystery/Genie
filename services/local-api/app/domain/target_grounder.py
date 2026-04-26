@@ -219,6 +219,8 @@ class TargetGrounder:
         for candidate in boxes:
             candidate_terms = terms(str(candidate["text"]))
             candidate_text = str(candidate["text"]).strip().lower()
+            if self._is_genie_ui_candidate(candidate_text=candidate_text, desired_text=desired_text):
+                continue
             if wants_new_tab and candidate_text in {"+", "＋"}:
                 decorated = dict(candidate, bbox_source="ocr")
                 scored.append((0.99, decorated))
@@ -304,6 +306,24 @@ class TargetGrounder:
             "view",
         }
         return bool(label_terms & common_controls) or len(label_terms) <= 3
+
+    def _is_genie_ui_candidate(self, *, candidate_text: str, desired_text: str) -> bool:
+        if "genie" in desired_text:
+            return False
+        genie_markers = (
+            "ask genie",
+            "guide me",
+            "mark done",
+            "next step",
+            "re-scan",
+            "stop guidance",
+            "draw region",
+            "track screen",
+            "attach files",
+            "collapse",
+            "target:",
+        )
+        return any(marker in candidate_text for marker in genie_markers)
 
     def _heuristic_target(
         self,

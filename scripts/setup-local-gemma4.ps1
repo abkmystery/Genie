@@ -23,6 +23,8 @@ Write-Host "Target: $modelDirAbs"
 & $Python "-$PythonVersion" -m pip install -r (Join-Path $runnerDir "requirements.txt")
 Write-Host "Installing latest Hugging Face Transformers with Gemma 4 multimodal support..." -ForegroundColor Cyan
 & $Python "-$PythonVersion" -m pip install --upgrade --force-reinstall "transformers @ git+https://github.com/huggingface/transformers.git"
+Write-Host "Pinning NumPy below 2.0 for current Gemma/Transformers compatibility..." -ForegroundColor Cyan
+& $Python "-$PythonVersion" -m pip install --upgrade --force-reinstall "numpy>=1.26,<2"
 & $Python "-$PythonVersion" -m pip install "huggingface_hub[cli]"
 
 $verifyScript = @'

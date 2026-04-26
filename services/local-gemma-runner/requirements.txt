@@ -6,4 +6,4 @@ torch
 accelerate
 soundfile
 Pillow
-numpy
+numpy>=1.26,<2

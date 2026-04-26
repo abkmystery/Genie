@@ -243,7 +243,7 @@ export default function App() {
       }
       guidanceObserveInFlightRef.current = true;
       try {
-        const next = await api.observeGuidedTask();
+        const next = await withScreenCaptureHidden(() => api.observeGuidedTask());
         if (!cancelled) {
           setGuidedStatus(next);
         }
@@ -426,12 +426,12 @@ export default function App() {
     const userMessage: MessageItem = { id: crypto.randomUUID(), role: "user", text: goal.trim() };
     setMessages((previous) => [...previous, userMessage]);
     try {
-      const payload = await api.startGuidedTask({
+      const payload = await withScreenCaptureHidden(() => api.startGuidedTask({
         prompt: resolvedGoal,
         conversationId: conversationId,
         sourceIds: sources.map((source) => source.id),
         regionSelection: regionContext?.selection ?? null,
-      });
+      }));
       if (!payload.ok || !payload.status) {
         throw new Error(payload.message || "Guidance could not start.");
       }
@@ -607,7 +607,7 @@ export default function App() {
     action: "mark_done" | "next_step" | "pause" | "resume" | "rescan" | "cant_find_it",
   ) => {
     await clearGuidanceOverlay();
-    const status = await api.actOnGuidedTask({ action, session_id: guidedStatus?.session?.id ?? null });
+    const status = await withScreenCaptureHidden(() => api.actOnGuidedTask({ action, session_id: guidedStatus?.session?.id ?? null }));
     setGuidedStatus(status);
   };
 
@@ -808,10 +808,10 @@ export default function App() {
                 }}
                 onCantFind={async () => {
                   await clearGuidanceOverlay();
-                  const waiting = await api.actOnGuidedTask({ action: "cant_find_it", session_id: guidedStatus?.session?.id ?? null });
+                  const waiting = await withScreenCaptureHidden(() => api.actOnGuidedTask({ action: "cant_find_it", session_id: guidedStatus?.session?.id ?? null }));
                   setGuidedStatus(waiting);
                   setPendingGuidedRescan(true);
-                  const context = await api.captureScreen();
+                  const context = await withScreenCaptureHidden(() => api.captureScreen());
                   setPendingCapture(context);
                   await window.genieShell?.openRegionOverlay?.({
                     captureId: context.capture.id,
