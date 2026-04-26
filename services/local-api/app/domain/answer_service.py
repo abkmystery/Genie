@@ -210,7 +210,15 @@ class AnswerService:
             audio_base64=None,
             audio_format=None,
         )
-        self.trace_service.emit(trace_id, "MODEL_CALLED", "Model provider returned a response", {"provider": response.provider_used})
+        self.trace_service.emit(
+            trace_id,
+            "MODEL_CALLED",
+            "Model provider returned a response",
+            {
+                "provider": response.provider_used,
+                "provider_diagnostics": response.provider_diagnostics.model_dump() if response.provider_diagnostics else None,
+            },
+        )
 
         self.session_service.add_turn(conversation_id, "user", request.prompt)
         self.session_service.add_turn(conversation_id, "assistant", response.answer)
@@ -219,6 +227,7 @@ class AnswerService:
         return ChatResponse(
             answer=response.answer,
             provider_used=response.provider_used,
+            provider_diagnostics=response.provider_diagnostics,
             trace_id=trace_id,
             evidence=evidence,
             debug_steps=self.trace_service.list_events(trace_id),

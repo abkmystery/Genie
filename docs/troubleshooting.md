@@ -42,3 +42,14 @@ That is expected unless an explicit activity recording session was started earli
 - Use `I can't find it` and then circle the relevant area so Genie can re-ground inside that region.
 - Make sure the relevant button, field, or label is actually visible on the current screen.
 - Genie merges OCR words into line/phrase candidates for better target boxes, but if OCR is weak or the control is icon-only, it may fall back to text-only instructions instead of guessing.
+
+## Settings shows Offline fallback or Endpoint error
+
+- `Offline fallback` means Genie is intentionally using the bundled mock path because no live Gemma provider was reachable.
+- `Endpoint error` means the selected HTTP provider responded with an error; open Debug to see the sanitized error.
+- `Local model not ready` means the local runner is not warmed up or failed to load the model. Start `npm.cmd run dev:local-gemma`, call `/warmup`, then re-run diagnostics.
+- Final competition recordings should show `Live Gemma` unless you are explicitly demonstrating offline fallback.
+
+## Package audit fails
+
+Run `npm.cmd run package:public` for public sharing. It quarantines `resources/private` during packaging and then runs the audit. If `npm.cmd run audit:package` fails on an old `win-unpacked` folder, rebuild the public package so stale private resources are removed.

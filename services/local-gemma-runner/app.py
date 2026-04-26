@@ -4,6 +4,8 @@ import base64
 import mimetypes
 import os
 import tempfile
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -55,6 +57,11 @@ class ChatCompletionRequest(BaseModel):
 app = FastAPI(title="Genie Local Gemma Runner", version="0.2.0")
 _processor = None
 _model = None
+_load_lock = threading.Lock()
+_generation_lock = threading.Lock()
+_load_started_at: float | None = None
+_load_finished_at: float | None = None
+_last_error: str | None = None
 
 
 def _dependency_status() -> dict[str, Any]:
@@ -67,6 +74,18 @@ def _dependency_status() -> dict[str, Any]:
         "auto_model_for_multimodal_lm_available": has_required_model,
         "import_error": _IMPORT_ERROR,
         "setup_hint": None if has_required_model else GEMMA4_SETUP_HINT,
+    }
+
+
+def _runtime_status() -> dict[str, Any]:
+    return {
+        "loaded": _processor is not None and _model is not None,
+        "loading": _load_started_at is not None and _load_finished_at is None and _model is None,
+        "load_started_at": _load_started_at,
+        "load_finished_at": _load_finished_at,
+        "last_error": _last_error,
+        "device": str(getattr(_model, "device", "unloaded")) if _model is not None else "unloaded",
+        "dtype": str(getattr(_model, "dtype", "unknown")) if _model is not None else "unknown",
     }
 
 
@@ -92,24 +111,36 @@ def _raise_unavailable() -> None:
 
 
 def _load_model(model_name: str):
-    global _processor, _model
+    global _processor, _model, _load_started_at, _load_finished_at, _last_error
     if _processor is not None and _model is not None:
         return _processor, _model
 
-    _raise_unavailable()
-    model_ref = _model_ref(model_name)
-    _processor = AutoProcessor.from_pretrained(model_ref, padding_side="left", use_fast=True)
-    load_kwargs: dict[str, Any] = {
-        "dtype": torch.bfloat16 if torch.cuda.is_available() else "auto",
-        "device_map": "auto",
-        "low_cpu_mem_usage": True,
-    }
-    try:
-        load_kwargs["attn_implementation"] = "sdpa"
-        _model = AutoModelForMultimodalLM.from_pretrained(model_ref, **load_kwargs).eval()
-    except TypeError:
-        load_kwargs.pop("attn_implementation", None)
-        _model = AutoModelForMultimodalLM.from_pretrained(model_ref, **load_kwargs).eval()
+    with _load_lock:
+        if _processor is not None and _model is not None:
+            return _processor, _model
+        _load_started_at = time.time()
+        _load_finished_at = None
+        _last_error = None
+        try:
+            _raise_unavailable()
+            model_ref = _model_ref(model_name)
+            _processor = AutoProcessor.from_pretrained(model_ref, padding_side="left", use_fast=True)
+            load_kwargs: dict[str, Any] = {
+                "dtype": torch.bfloat16 if torch.cuda.is_available() else "auto",
+                "device_map": "auto",
+                "low_cpu_mem_usage": True,
+            }
+            try:
+                load_kwargs["attn_implementation"] = "sdpa"
+                _model = AutoModelForMultimodalLM.from_pretrained(model_ref, **load_kwargs).eval()
+            except TypeError:
+                load_kwargs.pop("attn_implementation", None)
+                _model = AutoModelForMultimodalLM.from_pretrained(model_ref, **load_kwargs).eval()
+            _load_finished_at = time.time()
+        except Exception as exc:
+            _last_error = f"{type(exc).__name__}: {exc}"
+            _load_finished_at = time.time()
+            raise
     return _processor, _model
 
 
@@ -208,7 +239,44 @@ def health():
         "model_dir": str(DEFAULT_MODEL_DIR),
         "model_id": DEFAULT_MODEL_ID,
         "dependencies": status,
+        "runtime": _runtime_status(),
     }
+
+
+@app.get("/ready")
+def ready():
+    status = _dependency_status()
+    runtime = _runtime_status()
+    return {
+        "ok": bool(status["ok"] and runtime["loaded"]),
+        "dependencies": status,
+        "runtime": runtime,
+        "model_dir_exists": DEFAULT_MODEL_DIR.exists(),
+        "model_id": DEFAULT_MODEL_ID,
+    }
+
+
+@app.get("/diagnostics")
+def diagnostics():
+    return {
+        "ok": True,
+        "model_id": DEFAULT_MODEL_ID,
+        "model_dir": str(DEFAULT_MODEL_DIR),
+        "model_dir_exists": DEFAULT_MODEL_DIR.exists(),
+        "dependencies": _dependency_status(),
+        "runtime": _runtime_status(),
+        "cuda_available": bool(torch and torch.cuda.is_available()) if torch else False,
+    }
+
+
+@app.post("/warmup")
+def warmup():
+    try:
+        started = time.perf_counter()
+        _load_model(DEFAULT_MODEL_ID)
+        return {"ok": True, "latency_ms": round((time.perf_counter() - started) * 1000, 2), "runtime": _runtime_status()}
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail={"error": f"{type(exc).__name__}: {exc}", "runtime": _runtime_status(), "dependencies": _dependency_status()}) from exc
 
 
 @app.get("/v1/models")
@@ -236,25 +304,26 @@ def list_models():
 def chat_completions(request: ChatCompletionRequest):
     temp_paths: list[Path] = []
     try:
-        processor, model = _load_model(request.model)
-        gemma_messages = _build_gemma_messages(request.messages, temp_paths)
-        inputs = processor.apply_chat_template(
-            gemma_messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-        )
-        inputs = _move_inputs_to_device(inputs, model)
-        input_len = inputs["input_ids"].shape[-1]
-        output = model.generate(
-            **inputs,
-            max_new_tokens=request.max_tokens,
-            do_sample=request.temperature > 0,
-            temperature=max(request.temperature, 0.01),
-            cache_implementation="static",
-        )
-        decoded = processor.decode(output[0][input_len:], skip_special_tokens=True).strip()
+        with _generation_lock:
+            processor, model = _load_model(request.model)
+            gemma_messages = _build_gemma_messages(request.messages, temp_paths)
+            inputs = processor.apply_chat_template(
+                gemma_messages,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt",
+            )
+            inputs = _move_inputs_to_device(inputs, model)
+            input_len = inputs["input_ids"].shape[-1]
+            output = model.generate(
+                **inputs,
+                max_new_tokens=request.max_tokens,
+                do_sample=request.temperature > 0,
+                temperature=max(request.temperature, 0.01),
+                cache_implementation="static",
+            )
+            decoded = processor.decode(output[0][input_len:], skip_special_tokens=True).strip()
         return {
             "choices": [
                 {
@@ -270,6 +339,7 @@ def chat_completions(request: ChatCompletionRequest):
             "model": request.model,
             "model_dir": str(DEFAULT_MODEL_DIR),
             "dependencies": _dependency_status(),
+            "runtime": _runtime_status(),
         }
         raise HTTPException(status_code=503, detail=detail) from exc
     finally:
@@ -278,3 +348,14 @@ def chat_completions(request: ChatCompletionRequest):
                 path.unlink(missing_ok=True)
             except Exception:
                 pass
+
+
+@app.post("/smoke")
+def smoke():
+    request = ChatCompletionRequest(
+        model=DEFAULT_MODEL_ID,
+        messages=[{"role": "user", "content": "Reply with exactly: GENIE_OK"}],
+        max_tokens=24,
+        temperature=0,
+    )
+    return chat_completions(request)

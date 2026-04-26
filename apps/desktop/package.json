@@ -2,7 +2,7 @@
   "name": "@genie/desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "Genie desktop shell for Phase 1 Screen Companion",
+  "description": "Genie privacy-first AI companion desktop shell",
   "author": "Ahmed Bin Khalid",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -49,6 +49,10 @@
       {
         "from": "../../resources/private",
         "to": "private"
+      },
+      {
+        "from": "../../resources/public",
+        "to": "public"
       },
       {
         "from": "../../resources/backend/genie-local-api.exe",

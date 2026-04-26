@@ -31,6 +31,14 @@ Genie is a desktop-first, local-orchestration architecture built to keep the UI 
 - `AnswerService`: builds grounded prompts, routes to a `ModelProvider`, formats evidence, and records traces.
 - `TraceService`: emits per-request events and summaries shown in the debug panel.
 
+## Competition Reliability Layer
+
+- Provider diagnostics normalize model state as `live_gemma`, `fallback_mock`, `local_not_ready`, or `endpoint_error` so mock fallback is never silent.
+- Demo mode routes through `services/demo-gateway` by default; competition credentials belong server-side or in the private demo-only resource file, never in public source.
+- Guidance telemetry records capture signatures, screen relevance, grounding confidence, bbox source, step decisions, replan reasons, and latency breakdowns.
+- `npm.cmd run eval:guidance` runs a synthetic golden-target suite for common UI controls before demo recording.
+- `npm.cmd run audit:package` blocks public packages that include real demo credentials, env files, local DBs, captures, caches, or model weights.
+
 ## Storage
 
 - SQLite stores settings, source metadata, chunks, and trace summaries.

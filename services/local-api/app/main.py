@@ -21,6 +21,7 @@ from app.models.contracts import (
     GuidedTaskActionRequest,
     GuidedTaskStatus,
     HealthStatus,
+    ProviderDiagnostics,
     SetProfileRequest,
     StartGuidedTaskRequest,
     StartGuidedTaskResponse,
@@ -43,7 +44,15 @@ app = FastAPI(title="Genie Local API", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+        "http://127.0.0.1:8765",
+        "http://localhost:8765",
+        "app://genie",
+        "file://",
+        "null",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -58,16 +67,48 @@ async def health() -> HealthStatus:
         warnings.append(container.profile_manager.credential_store.warning)
 
     demo_status = None
+    provider_diagnostics = ProviderDiagnostics(
+        provider_status="unknown",
+        provider_source=profile.backend_base_url,
+        live_model_name=profile.model_name,
+    )
     if profile.id == "demo" and container.provider_registry.demo_resolver is not None:
-        resolved = await container.provider_registry.demo_resolver.resolve(
-            demo_source_order=profile.demo_source_order,
-            remote_demo_file_url=profile.remote_demo_file_url,
-            remote_demo_file_format=profile.remote_demo_file_format,
-            default_base_url=(profile.backend_base_url or "https://generativelanguage.googleapis.com/v1beta/openai/"),
-            default_model=(profile.default_model or profile.model_name or "gemma-4-26b-a4b-it"),
-            default_timeout_ms=profile.timeout_ms or 60000,
-        )
-        demo_status = resolved.status.model_dump()
+        if profile.api_style == "genie_gateway":
+            try:
+                async with httpx.AsyncClient(timeout=3) as client:
+                    response = await client.get(f"{profile.backend_base_url.rstrip('/')}/health")
+                    response.raise_for_status()
+                    gateway_health = response.json()
+                live = bool(gateway_health.get("has_gemini_api_key"))
+                provider_diagnostics = ProviderDiagnostics(
+                    provider_status="live_gemma" if live else "fallback_mock",
+                    provider_source="demo_gateway",
+                    live_model_name=str(gateway_health.get("model") or profile.model_name),
+                    fallback_reason=None if live else "Demo gateway is reachable but has no upstream Gemma key configured.",
+                )
+            except Exception as exc:
+                provider_diagnostics = ProviderDiagnostics(
+                    provider_status="endpoint_error",
+                    provider_source="demo_gateway",
+                    live_model_name=profile.model_name,
+                    last_model_error=f"{type(exc).__name__}: {exc}",
+                )
+        else:
+            resolved = await container.provider_registry.demo_resolver.resolve(
+                demo_source_order=profile.demo_source_order,
+                remote_demo_file_url=profile.remote_demo_file_url,
+                remote_demo_file_format=profile.remote_demo_file_format,
+                default_base_url=(profile.backend_base_url or "https://generativelanguage.googleapis.com/v1beta/openai/"),
+                default_model=(profile.default_model or profile.model_name or "gemma-4-26b-a4b-it"),
+                default_timeout_ms=profile.timeout_ms or 60000,
+            )
+            demo_status = resolved.status.model_dump()
+            provider_diagnostics = ProviderDiagnostics(
+                provider_status="live_gemma" if resolved.status.api_key_present else "fallback_mock",
+                provider_source=resolved.status.source,
+                live_model_name=resolved.status.model,
+                fallback_reason=None if resolved.status.api_key_present else "No bundled/remote demo credential found.",
+            )
 
     return HealthStatus(
         ok=True,
@@ -75,6 +116,7 @@ async def health() -> HealthStatus:
         storage_mode=container.profile_manager.credential_store.mode,
         warnings=warnings,
         demo_status=demo_status,
+        provider_diagnostics=provider_diagnostics,
     )
 
 

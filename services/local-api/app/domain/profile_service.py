@@ -37,7 +37,10 @@ class ProviderRegistry:
     def create_model_client(
         self, profile: ProviderConfig
     ) -> MockModelProvider | HttpModelProvider | GatewayModelProvider | DemoModelProvider | OpenAICompatibleHttpModelProvider:
-        if profile.id == "demo" and self.demo_resolver is not None:
+        if profile.id == "demo" and self.demo_resolver is not None and profile.api_style == "openai_compatible" and profile.backend_base_url.startswith("https://generativelanguage.googleapis.com"):
+            # Legacy private demo builds may still opt into direct bundled-file
+            # routing by pointing the demo profile at Gemini. Competition builds
+            # should route demo traffic through the demo gateway instead.
             async def resolve_demo_config(resolved_profile: ProviderConfig) -> DemoResolverResult:
                 return await self.demo_resolver.resolve(
                     demo_source_order=resolved_profile.demo_source_order,
@@ -148,6 +151,11 @@ class ProfileManager:
             if custom_model:
                 profile.model_name = custom_model
         if profile.id == "demo":
+            if self.demo_gateway_url:
+                profile.backend_base_url = self.demo_gateway_url
+                profile.endpoint_override = self.demo_gateway_url
+                profile.transport = "gateway"
+                profile.api_style = "genie_gateway"
             # Demo model can be overridden by settings (optional) but no demo key is stored in Settings.
             demo_model = self.database.get_setting("demo_model", "") or ""
             if demo_model:

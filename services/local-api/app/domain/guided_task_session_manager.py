@@ -12,6 +12,7 @@ from app.models.contracts import (
     GuidedTaskStep,
     GuidedTaskSession,
     GuidedTaskStatus,
+    GuidanceTelemetry,
     StepProgressState,
 )
 
@@ -24,6 +25,7 @@ class _ManagedGuidedTask:
     max_steps: int = 6
     latest_grounding: GroundingResult | None = None
     progress_state: StepProgressState | None = None
+    telemetry: GuidanceTelemetry | None = None
     recovery_options: list[str] = field(default_factory=list)
     previous_screen_text: str = ""
     previous_screen_signature: str = ""
@@ -92,6 +94,7 @@ class GuidedTaskSessionManager:
         previous_screen_signature: str | None = None,
         status: str | None = None,
         last_error: str | None = None,
+        telemetry: GuidanceTelemetry | None = None,
     ) -> GuidedTaskStatus:
         with self._lock:
             if self._current is None:
@@ -102,6 +105,8 @@ class GuidedTaskSessionManager:
                 self._current.latest_grounding = grounding
             if progress_state is not None:
                 self._current.progress_state = progress_state
+            if telemetry is not None:
+                self._current.telemetry = telemetry
             if recovery_options is not None:
                 self._current.recovery_options = recovery_options
             if previous_screen_text is not None:
@@ -123,6 +128,7 @@ class GuidedTaskSessionManager:
             self._current.session.current_step_index = next_index
             self._current.latest_grounding = None
             self._current.progress_state = None
+            self._current.telemetry = None
             self._current.recovery_options = []
             self._current.previous_screen_text = ""
             if next_index >= len(self._current.plan.steps):
@@ -144,6 +150,7 @@ class GuidedTaskSessionManager:
             self._current.session.updated_at = datetime.now(timezone.utc)
             self._current.latest_grounding = None
             self._current.progress_state = None
+            self._current.telemetry = None
             self._current.recovery_options = []
             self._current.previous_screen_text = ""
             return self._status_from(self._current)
@@ -160,6 +167,7 @@ class GuidedTaskSessionManager:
             self._current.session.updated_at = datetime.now(timezone.utc)
             self._current.latest_grounding = None
             self._current.progress_state = None
+            self._current.telemetry = None
             self._current.recovery_options = []
             self._current.previous_screen_text = ""
             return self._status_from(self._current)
@@ -175,6 +183,7 @@ class GuidedTaskSessionManager:
             self._current.session.updated_at = datetime.now(timezone.utc)
             self._current.latest_grounding = None
             self._current.progress_state = None
+            self._current.telemetry = None
             self._current.recovery_options = []
             self._last = self._current
             self._current = None
@@ -193,6 +202,7 @@ class GuidedTaskSessionManager:
             overlay_target=overlay_target,
             progress_state=managed.progress_state,
             recovery_options=list(managed.recovery_options),
+            telemetry=managed.telemetry,
         )
 
     def current_step(self) -> GuidedTaskStep | None:

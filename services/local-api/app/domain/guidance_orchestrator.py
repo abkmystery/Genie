@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from time import perf_counter
+
 from app.domain.guidance_screen_state import GuidanceScreenStateAnalyzer
 from app.domain.guided_task_session_manager import GuidedTaskSessionManager
 from app.domain.guided_task_trace_logger import GuidedTaskTraceLogger
@@ -9,6 +11,7 @@ from app.domain.task_planner import TaskPlanner
 from app.domain.target_grounder import TargetGrounder
 from app.models.contracts import (
     EvidenceItem,
+    GuidanceTelemetry,
     GroundingResult,
     GuidedTaskStatus,
     ProviderConfig,
@@ -160,6 +163,7 @@ class GuidanceOrchestrator:
         overlay_style: str,
     ) -> GuidedTaskStatus:
         status = self.session_manager.current()
+        started_at = perf_counter()
         if not status.session or status.current_step is None:
             return status
         if status.session.status == "needs_attention":
@@ -193,6 +197,15 @@ class GuidanceOrchestrator:
                 recovery_options=recovery_options,
                 previous_screen_text=screen_context.text,
                 previous_screen_signature=current_screen_signature,
+                telemetry=GuidanceTelemetry(
+                    capture_signature=current_screen_signature,
+                    screen_relevance="unrelated",
+                    grounding_confidence=None,
+                    target_bbox_source=None,
+                    step_decision="pause_unrelated",
+                    replan_reason="current screen no longer appears related",
+                    latency_breakdown={"observe_ms": round((perf_counter() - started_at) * 1000, 2)},
+                ),
             )
             self.trace_logger.emit(
                 status.session.trace_id,
@@ -225,6 +238,15 @@ class GuidanceOrchestrator:
             previous_screen_signature=current_screen_signature,
             clear_grounding=should_refresh,
             status="needs_attention" if should_refresh else None,
+            telemetry=GuidanceTelemetry(
+                capture_signature=current_screen_signature,
+                screen_relevance="changed" if screen_changed else "same",
+                grounding_confidence=status.latest_grounding.confidence if status.latest_grounding else None,
+                target_bbox_source=status.latest_grounding.target_bbox_source if status.latest_grounding else None,
+                step_decision="refresh_grounding" if should_refresh else progress.state,
+                replan_reason="visual change" if should_refresh else None,
+                latency_breakdown={"observe_ms": round((perf_counter() - started_at) * 1000, 2)},
+            ),
         )
         if updated.session:
             self.trace_logger.emit(
@@ -268,6 +290,7 @@ class GuidanceOrchestrator:
         force_replan: bool = False,
     ) -> GuidedTaskStatus:
         status = self.session_manager.current()
+        started_at = perf_counter()
         if not status.session or status.current_step is None or status.plan is None:
             return status
 
@@ -300,6 +323,15 @@ class GuidanceOrchestrator:
                 ],
                 previous_screen_text=screen_context.text,
                 previous_screen_signature=self.screen_state_analyzer.screen_signature(screen_context),
+                telemetry=GuidanceTelemetry(
+                    capture_signature=self.screen_state_analyzer.screen_signature(screen_context),
+                    screen_relevance="unrelated",
+                    grounding_confidence=None,
+                    target_bbox_source=None,
+                    step_decision="pause_unrelated",
+                    replan_reason="current screen unrelated during grounding",
+                    latency_breakdown={"ground_ms": round((perf_counter() - started_at) * 1000, 2)},
+                ),
             )
             self.trace_logger.emit(
                 status.session.trace_id,
@@ -374,6 +406,15 @@ class GuidanceOrchestrator:
             status="active" if grounding.success else "needs_attention",
             previous_screen_text=screen_context.text,
             previous_screen_signature=self.screen_state_analyzer.screen_signature(screen_context),
+            telemetry=GuidanceTelemetry(
+                capture_signature=self.screen_state_analyzer.screen_signature(screen_context),
+                screen_relevance="relevant" if grounding.success else "uncertain",
+                grounding_confidence=grounding.confidence,
+                target_bbox_source=grounding.target_bbox_source,
+                step_decision="grounded" if grounding.success else "grounding_failed",
+                replan_reason="forced replan" if force_replan else None,
+                latency_breakdown={"ground_ms": round((perf_counter() - started_at) * 1000, 2)},
+            ),
         )
         if grounding.success:
             self.trace_logger.emit(

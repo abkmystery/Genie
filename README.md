@@ -114,6 +114,10 @@ If PowerShell blocks `npm.ps1`, always use `npm.cmd`.
 - Backend tests: `py -3.11 -m pytest services/local-api/tests && py -3.11 -m pytest services/demo-gateway/tests`
 - Local Gemma 4 setup: `npm.cmd run setup:local-gemma`
 - Local Gemma 4 runner: `npm.cmd run dev:local-gemma`
+- Guidance eval: `npm.cmd run eval:guidance`
+- Package audit: `npm.cmd run audit:package`
+- Public package: `npm.cmd run package:public`
+- Private demo package: `npm.cmd run package:demo`
 - Root build: `npm.cmd run build`
 
 ## Profiles

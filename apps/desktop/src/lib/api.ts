@@ -6,6 +6,7 @@ import type {
   GuidedTaskActionRequest,
   GuidedTaskStatus,
   ProviderConfig,
+  ProviderDiagnostics,
   RegionSelection,
   SettingsState,
   StartGuidedTaskResponse,
@@ -49,6 +50,7 @@ export interface HealthPayload {
     supports_audio_input: boolean;
     api_key_present: boolean;
   } | null;
+  provider_diagnostics?: ProviderDiagnostics | null;
 }
 
 const API_BASE = import.meta.env.VITE_LOCAL_API_BASE_URL ?? "http://127.0.0.1:8765";

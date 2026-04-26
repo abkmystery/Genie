@@ -110,6 +110,7 @@ class TargetGrounder:
             target_label=overlay.target_label,
             reason=reason,
             fallback_suggestion=None,
+            target_bbox_source=str(candidate.get("bbox_source") or ("ocr" if candidate.get("source") else "heuristic")),
         )
 
     def _extract_ocr_boxes(self, image_path: Path) -> list[dict[str, object]]:
@@ -212,21 +213,31 @@ class TargetGrounder:
             return []
         desired_text = f"{step.target_description} {step.instruction_text}".lower()
         wants_control = self._looks_like_control_request(desired_text)
+        wants_address_bar = any(marker in desired_text for marker in ("address bar", "url bar", "type a url", "enter a url"))
+        wants_new_tab = "new tab" in desired_text
         scored: list[tuple[float, dict[str, object]]] = []
         for candidate in boxes:
             candidate_terms = terms(str(candidate["text"]))
+            candidate_text = str(candidate["text"]).strip().lower()
+            if wants_new_tab and candidate_text in {"+", "＋"}:
+                decorated = dict(candidate, bbox_source="ocr")
+                scored.append((0.99, decorated))
+                continue
             if not candidate_terms:
                 continue
             overlap = desired_terms & candidate_terms
-            if not overlap:
+            address_match = wants_address_bar and {"search", "url", "type"} & candidate_terms
+            if not overlap and not address_match:
                 continue
-            coverage = len(overlap) / max(1, len(desired_terms))
+            effective_overlap_count = len(overlap) + (2 if address_match else 0)
+            coverage = effective_overlap_count / max(1, len(desired_terms))
             precision = len(overlap) / max(1, len(candidate_terms))
             exact_bonus = 0.16 if self._contains_phrase(str(candidate["text"]), desired_text) else 0.0
+            address_bonus = 0.18 if address_match else 0.0
             control_bonus = 0.12 if wants_control and self._looks_like_interactive_label(str(candidate["text"])) else 0.0
             line_bonus = 0.08 if candidate.get("source") in {"line", "phrase"} and len(candidate_terms) > 1 else 0.0
             size_penalty = 0.12 if int(candidate["width"]) > 900 and precision < 0.75 else 0.0
-            confidence = min(0.98, 0.38 + (coverage * 0.34) + (precision * 0.18) + exact_bonus + control_bonus + line_bonus - size_penalty)
+            confidence = min(0.98, 0.38 + (coverage * 0.34) + (precision * 0.18) + exact_bonus + address_bonus + control_bonus + line_bonus - size_penalty)
             decorated = self._decorate_candidate(candidate, desired_text)
             scored.append((confidence, decorated))
         scored.sort(key=lambda item: (item[0], -int(item[1]["width"])), reverse=True)
@@ -319,6 +330,7 @@ class TargetGrounder:
                 "height": max(36, int(capture.height * 0.045)),
                 "pad_x": 12,
                 "pad_y": 8,
+                "bbox_source": "heuristic",
             }
             return self._build_overlay_result(
                 candidate=candidate,
@@ -339,6 +351,7 @@ class TargetGrounder:
                 "height": max(40, int(capture.height * 0.055)),
                 "pad_x": 8,
                 "pad_y": 4,
+                "bbox_source": "heuristic",
             }
             return self._build_overlay_result(
                 candidate=candidate,
@@ -362,6 +375,7 @@ class TargetGrounder:
                 "height": max(100, int(capture.height * 0.2)),
                 "pad_x": 0,
                 "pad_y": 0,
+                "bbox_source": "heuristic",
             }
             return self._build_overlay_result(
                 candidate=candidate,
@@ -384,6 +398,7 @@ class TargetGrounder:
             "height": max(34, int(capture.height * 0.032)),
             "pad_x": 0,
             "pad_y": 0,
+            "bbox_source": "heuristic",
         }
         return self._build_overlay_result(
             candidate=candidate,
@@ -491,6 +506,7 @@ class TargetGrounder:
                 "top": top,
                 "width": width,
                 "height": height,
+                "bbox_source": "model",
             },
             confidence=min(0.98, confidence),
             step=step,

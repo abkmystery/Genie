@@ -17,6 +17,7 @@ spec.loader.exec_module(runner_app)
 
 _build_gemma_messages = runner_app._build_gemma_messages
 _dependency_status = runner_app._dependency_status
+app = runner_app.app
 
 
 def test_dependency_status_exposes_actionable_fields():
@@ -24,6 +25,28 @@ def test_dependency_status_exposes_actionable_fields():
 
     assert "auto_model_for_multimodal_lm_available" in status
     assert "setup_hint" in status
+
+
+def test_ready_endpoint_reports_runtime_state():
+    from fastapi.testclient import TestClient
+
+    client = TestClient(app)
+    payload = client.get("/ready").json()
+
+    assert "ok" in payload
+    assert "runtime" in payload
+    assert "dependencies" in payload
+
+
+def test_warmup_endpoint_uses_loader(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setattr(runner_app, "_load_model", lambda _model_id: ("processor", "model"))
+    client = TestClient(app)
+    payload = client.post("/warmup").json()
+
+    assert payload["ok"] is True
+    assert "latency_ms" in payload
 
 
 def test_openai_audio_payload_is_converted_to_gemma_audio_part():

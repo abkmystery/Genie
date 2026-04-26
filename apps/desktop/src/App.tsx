@@ -255,7 +255,7 @@ export default function App() {
     };
     const timer = window.setInterval(() => {
       void tick();
-    }, 350);
+    }, 1000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);

@@ -13,4 +13,4 @@ if (-not (Test-Path $demoPath)) {
 
 npm.cmd run build:demo
 npm.cmd run package --workspace @genie/desktop
-
+npm.cmd run audit:package -- -AllowDemoCredential

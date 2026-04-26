@@ -40,6 +40,7 @@ class GatewayChatRequest(BaseModel):
 class GatewayChatResponse(BaseModel):
     answer: str
     provider_used: str
+    provider_diagnostics: dict[str, Any] | None = None
 
 
 app = FastAPI(title="Genie Demo Gateway", version="0.1.0")
@@ -55,6 +56,8 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemma-4-26b-a4b-it")
 
 DEMO_PROVIDER_URL = os.getenv("DEMO_PROVIDER_URL", "").rstrip("/")
 DEMO_PROVIDER_TOKEN = os.getenv("DEMO_PROVIDER_TOKEN", "")
+DEMO_OLLAMA_HOST = os.getenv("DEMO_OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
+DEMO_OLLAMA_MODEL = os.getenv("DEMO_OLLAMA_MODEL", "gemma2:2b")
 
 
 @app.get("/health")
@@ -106,7 +109,15 @@ async def _chat_via_ollama(request: GatewayChatRequest) -> GatewayChatResponse:
         response.raise_for_status()
         data = response.json()
         content = data.get("message", {}).get("content", "")
-    return GatewayChatResponse(answer=content or "(empty response)", provider_used=f"ollama:{DEMO_OLLAMA_MODEL}")
+    return GatewayChatResponse(
+        answer=content or "(empty response)",
+        provider_used=f"ollama:{DEMO_OLLAMA_MODEL}",
+        provider_diagnostics={
+            "provider_status": "live_gemma" if "gemma" in DEMO_OLLAMA_MODEL.lower() else "unknown",
+            "provider_source": "demo_gateway",
+            "live_model_name": DEMO_OLLAMA_MODEL,
+        },
+    )
 
 
 async def _chat_via_http_provider(request: GatewayChatRequest) -> GatewayChatResponse:
@@ -173,7 +184,15 @@ async def _chat_via_gemini_openai(request: GatewayChatRequest) -> GatewayChatRes
         data = response.json()
         message = (data.get("choices") or [{}])[0].get("message") or {}
         answer = message.get("content") or ""
-    return GatewayChatResponse(answer=answer or "(empty response)", provider_used=f"gemini:{GEMINI_MODEL}")
+    return GatewayChatResponse(
+        answer=answer or "(empty response)",
+        provider_used=f"gemini:{GEMINI_MODEL}",
+        provider_diagnostics={
+            "provider_status": "live_gemma",
+            "provider_source": "demo_gateway",
+            "live_model_name": GEMINI_MODEL,
+        },
+    )
 
 
 @app.post("/v1/chat", response_model=GatewayChatResponse)
@@ -195,7 +214,17 @@ async def chat(request: GatewayChatRequest) -> GatewayChatResponse:
                 "Answer: Configure GEMINI_API_KEY (server-side) for real model responses in demo mode.",
             ]
         ).strip()
-        return GatewayChatResponse(answer=answer, provider_used="demo-gateway:mock-fallback")
+        return GatewayChatResponse(
+            answer=answer,
+            provider_used="demo-gateway:mock-fallback",
+            provider_diagnostics={
+                "provider_status": "fallback_mock",
+                "provider_source": "demo_gateway",
+                "live_model_name": GEMINI_MODEL,
+                "fallback_reason": "Demo gateway upstream provider failed or is not configured.",
+                "last_model_error": f"{type(exc).__name__}: {exc}",
+            },
+        )
 
 
 @app.get("/diagnostics/models")

@@ -29,6 +29,7 @@ services/demo-gateway/data/
 resources/private/demo-provider.json
 resources/private/demo-provider.json.txt
 /models/
+/reports/
 resources/backend/*.exe
 resources/backend/pyinstaller-work/
 resources/backend/pyinstaller-spec/

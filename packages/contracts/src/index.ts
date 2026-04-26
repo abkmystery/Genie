@@ -30,6 +30,22 @@ export interface ProviderConfig extends ProviderProfile {
   token_present?: boolean;
 }
 
+export type ProviderRuntimeStatus =
+  | "live_gemma"
+  | "fallback_mock"
+  | "local_not_ready"
+  | "endpoint_error"
+  | "unknown";
+
+export interface ProviderDiagnostics {
+  provider_status: ProviderRuntimeStatus;
+  provider_source?: string | null;
+  live_model_name?: string | null;
+  fallback_reason?: string | null;
+  last_model_error?: string | null;
+  latency_ms?: number | null;
+}
+
 export interface SourceRecord {
   id: string;
   filename: string;
@@ -182,6 +198,7 @@ export interface ChatRequest {
 export interface ChatResponse {
   answer: string;
   provider_used: string;
+  provider_diagnostics?: ProviderDiagnostics | null;
   trace_id: string;
   evidence: EvidenceItem[];
   debug_steps: TraceEvent[];
@@ -314,6 +331,7 @@ export interface GroundingResult {
   target_label?: string | null;
   reason: string;
   fallback_suggestion?: string | null;
+  target_bbox_source?: "heuristic" | "ocr" | "model" | "fallback" | null;
 }
 
 export interface StepProgressState {
@@ -344,6 +362,17 @@ export interface GuidedTaskStatus {
   overlay_target?: OverlayTarget | null;
   progress_state?: StepProgressState | null;
   recovery_options: string[];
+  telemetry?: GuidanceTelemetry | null;
+}
+
+export interface GuidanceTelemetry {
+  capture_signature?: string | null;
+  screen_relevance?: "relevant" | "unrelated" | "changed" | "same" | "uncertain" | "unknown";
+  grounding_confidence?: number | null;
+  target_bbox_source?: "heuristic" | "ocr" | "model" | "fallback" | null;
+  step_decision?: string | null;
+  replan_reason?: string | null;
+  latency_breakdown?: Record<string, number>;
 }
 
 export interface StartGuidedTaskRequest {

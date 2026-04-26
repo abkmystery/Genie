@@ -19,6 +19,8 @@
     "dev:gateway": "py -3.11 -m uvicorn app.main:app --app-dir services/demo-gateway --reload --host 127.0.0.1 --port 8788",
     "setup:local-gemma": "powershell -ExecutionPolicy Bypass -File scripts/setup-local-gemma4.ps1",
     "dev:local-gemma": "powershell -ExecutionPolicy Bypass -File scripts/run-local-gemma.ps1",
+    "audit:package": "powershell -ExecutionPolicy Bypass -File scripts/audit-package.ps1",
+    "eval:guidance": "py -3.11 scripts/eval-guidance.py",
     "test": "npm run test:desktop && npm run test:backend",
     "build": "npm run build:contracts && npm run build:desktop",
     "build:public": "npm run build:backend && npm run build",

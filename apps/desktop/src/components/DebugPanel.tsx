@@ -13,7 +13,7 @@ export function DebugPanel({ response, traceEvents, error, guidedStatus }: Debug
       <div className="section-header">
         <div>
           <h3>Debug Trace</h3>
-          <p>Trace id, provider used, step timings, and surfaced errors for Phase 1 debugging.</p>
+          <p>Trace id, provider used, step timings, and surfaced errors for development debugging.</p>
         </div>
       </div>
       {error ? <p className="warning-banner">{error}</p> : null}
@@ -25,6 +25,26 @@ export function DebugPanel({ response, traceEvents, error, guidedStatus }: Debug
           <p>
             <strong>Provider:</strong> {response.provider_used}
           </p>
+          {response.provider_diagnostics ? (
+            <>
+              <p>
+                <strong>Provider status:</strong> {response.provider_diagnostics.provider_status}
+              </p>
+              <p>
+                <strong>Live model:</strong> {response.provider_diagnostics.live_model_name ?? "Unknown"}
+              </p>
+              {response.provider_diagnostics.fallback_reason ? (
+                <p>
+                  <strong>Fallback:</strong> {response.provider_diagnostics.fallback_reason}
+                </p>
+              ) : null}
+              {response.provider_diagnostics.last_model_error ? (
+                <p>
+                  <strong>Last model error:</strong> {response.provider_diagnostics.last_model_error}
+                </p>
+              ) : null}
+            </>
+          ) : null}
           <p>
             <strong>Warnings:</strong> {response.warnings.join(", ") || "None"}
           </p>
@@ -50,6 +70,19 @@ export function DebugPanel({ response, traceEvents, error, guidedStatus }: Debug
           <p>
             <strong>Progress:</strong> {guidedStatus.progress_state?.reason ?? "No progress signal yet"}
           </p>
+          {guidedStatus.telemetry ? (
+            <>
+              <p>
+                <strong>Screen relevance:</strong> {guidedStatus.telemetry.screen_relevance ?? "unknown"}
+              </p>
+              <p>
+                <strong>Decision:</strong> {guidedStatus.telemetry.step_decision ?? "unknown"}
+              </p>
+              <p>
+                <strong>Bbox source:</strong> {guidedStatus.telemetry.target_bbox_source ?? "unknown"}
+              </p>
+            </>
+          ) : null}
         </div>
       ) : null}
 

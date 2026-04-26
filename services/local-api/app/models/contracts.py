@@ -38,6 +38,15 @@ class ProviderConfig(ProviderProfile):
     token_present: bool = False
 
 
+class ProviderDiagnostics(BaseModel):
+    provider_status: Literal["live_gemma", "fallback_mock", "local_not_ready", "endpoint_error", "unknown"] = "unknown"
+    provider_source: str | None = None
+    live_model_name: str | None = None
+    fallback_reason: str | None = None
+    last_model_error: str | None = None
+    latency_ms: float | None = None
+
+
 class SourceRecord(BaseModel):
     id: str
     filename: str
@@ -173,6 +182,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     provider_used: str
+    provider_diagnostics: ProviderDiagnostics | None = None
     trace_id: str
     evidence: list[EvidenceItem]
     debug_steps: list[TraceEvent]
@@ -305,6 +315,7 @@ class GroundingResult(BaseModel):
     target_label: str | None = None
     reason: str
     fallback_suggestion: str | None = None
+    target_bbox_source: Literal["heuristic", "ocr", "model", "fallback"] | None = None
 
 
 class StepProgressState(BaseModel):
@@ -327,6 +338,16 @@ class GuidedTaskSession(BaseModel):
     last_error: str | None = None
 
 
+class GuidanceTelemetry(BaseModel):
+    capture_signature: str | None = None
+    screen_relevance: Literal["relevant", "unrelated", "changed", "same", "uncertain", "unknown"] = "unknown"
+    grounding_confidence: float | None = None
+    target_bbox_source: Literal["heuristic", "ocr", "model", "fallback"] | None = None
+    step_decision: str | None = None
+    replan_reason: str | None = None
+    latency_breakdown: dict[str, float] = Field(default_factory=dict)
+
+
 class GuidedTaskStatus(BaseModel):
     session: GuidedTaskSession | None = None
     plan: GuidedTaskPlan | None = None
@@ -335,6 +356,7 @@ class GuidedTaskStatus(BaseModel):
     overlay_target: OverlayTarget | None = None
     progress_state: StepProgressState | None = None
     recovery_options: list[str] = Field(default_factory=list)
+    telemetry: GuidanceTelemetry | None = None
 
 
 class StartGuidedTaskRequest(BaseModel):
@@ -440,6 +462,7 @@ class HealthStatus(BaseModel):
     storage_mode: str
     warnings: list[str] = Field(default_factory=list)
     demo_status: DemoProviderStatus | None = None
+    provider_diagnostics: ProviderDiagnostics | None = None
 
 
 class GatewayChatRequest(BaseModel):
@@ -457,3 +480,4 @@ class GatewayChatRequest(BaseModel):
 class GatewayChatResponse(BaseModel):
     answer: str
     provider_used: str
+    provider_diagnostics: ProviderDiagnostics | None = None

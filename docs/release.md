@@ -28,6 +28,12 @@ npm.cmd run package:public
 
 This produces release artifacts under `apps/desktop/release/`.
 
+Run the package audit before sharing a public artifact:
+
+```powershell
+npm.cmd run audit:package
+```
+
 ## Demo Build With Bundled Demo Credential File
 
 If you create `resources/private/demo-provider.json` locally (gitignored), `build:demo` will bundle it into the packaged app resources so Demo mode can use real AI out of the box.
@@ -44,6 +50,7 @@ Details: see `docs/demo-credential-file.md`.
 - Do not bundle custom credential values into the app.
 - Do not commit production gateway `.env` files.
 - Public release bundles may include profile metadata and example configs only.
+- Public release bundles must not include `demo-provider.json`, `.env` files, local databases, captures, model weights, or Python caches.
 
 ## Demo Mode
 

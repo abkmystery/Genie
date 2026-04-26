@@ -40,6 +40,35 @@ interface SettingsPanelProps {
   diagnostics: Record<string, unknown> | null;
 }
 
+function providerStatusLabel(status?: string | null): string {
+  switch (status) {
+    case "live_gemma":
+      return "Live Gemma";
+    case "fallback_mock":
+      return "Offline fallback";
+    case "local_not_ready":
+      return "Local model not ready";
+    case "endpoint_error":
+      return "Endpoint error";
+    default:
+      return "Unknown";
+  }
+}
+
+function providerStatusClass(status?: string | null): string {
+  switch (status) {
+    case "live_gemma":
+      return "live";
+    case "fallback_mock":
+      return "fallback";
+    case "local_not_ready":
+    case "endpoint_error":
+      return "error";
+    default:
+      return "unknown";
+  }
+}
+
 export function SettingsPanel({
   profiles,
   settings,
@@ -108,7 +137,7 @@ export function SettingsPanel({
               <strong>{profile.display_name}</strong>
               <p>{profile.description}</p>
               <small>
-                transport={profile.transport} · model={profile.model_name} · screen=
+                transport={profile.transport} | model={profile.model_name} | screen=
                 {String(profile.capabilities.supports_screen_input)}
               </small>
             </div>
@@ -323,11 +352,23 @@ export function SettingsPanel({
       {health ? (
         <div className="diagnostics-card">
           <strong>Diagnostics</strong>
+          <div className={`provider-status provider-status-${providerStatusClass(health.provider_diagnostics?.provider_status)}`}>
+            <span>{providerStatusLabel(health.provider_diagnostics?.provider_status)}</span>
+            <small>
+              {health.provider_diagnostics?.live_model_name ?? health.profile.model_name}
+              {health.provider_diagnostics?.provider_source ? ` via ${health.provider_diagnostics.provider_source}` : ""}
+            </small>
+          </div>
           <p>Profile: {health.profile.display_name}</p>
           <p>Credential storage: {health.storage_mode}</p>
+          {health.provider_diagnostics?.latency_ms != null ? (
+            <p>Provider latency: {Math.round(health.provider_diagnostics.latency_ms)} ms</p>
+          ) : null}
+          {health.provider_diagnostics?.fallback_reason ? <p>Fallback reason: {health.provider_diagnostics.fallback_reason}</p> : null}
+          {health.provider_diagnostics?.last_model_error ? <p className="warning-inline">Last model error: {health.provider_diagnostics.last_model_error}</p> : null}
           {health.demo_status ? (
             <p>
-              Demo provider: source={health.demo_status.source} · model={health.demo_status.model} · configured=
+              Demo provider: source={health.demo_status.source} | model={health.demo_status.model} | configured=
               {String(health.demo_status.api_key_present)}
             </p>
           ) : null}
