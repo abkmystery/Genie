@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import base64
+import ctypes
 import mimetypes
 import os
+import platform
 import tempfile
 import threading
 import time
@@ -65,6 +67,10 @@ _load_finished_at: float | None = None
 _last_error: str | None = None
 
 
+class LocalModelNotReadyError(RuntimeError):
+    pass
+
+
 def _dependency_status() -> dict[str, Any]:
     has_required_model = AutoModelForMultimodalLM is not None
     return {
@@ -92,6 +98,58 @@ def _runtime_status() -> dict[str, Any]:
 
 def _model_ref(model_name: str) -> str:
     return str(DEFAULT_MODEL_DIR if DEFAULT_MODEL_DIR.exists() else model_name)
+
+
+def _available_memory_bytes() -> int | None:
+    try:
+        if platform.system().lower() == "windows":
+            class _MemoryStatus(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            status = _MemoryStatus()
+            status.dwLength = ctypes.sizeof(_MemoryStatus)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+                return int(status.ullAvailPhys)
+    except Exception:
+        return None
+    return None
+
+
+def _largest_safetensors_bytes(model_dir: Path) -> int:
+    try:
+        return max((path.stat().st_size for path in model_dir.glob("*.safetensors")), default=0)
+    except Exception:
+        return 0
+
+
+def _preflight_model_files(model_ref: str) -> None:
+    model_dir = Path(model_ref)
+    if not model_dir.exists():
+        return
+    largest = _largest_safetensors_bytes(model_dir)
+    available = _available_memory_bytes()
+    if largest <= 0 or available is None or torch is None or torch.cuda.is_available():
+        return
+    # Single-shard 4B models can need substantially more than the raw file
+    # size on CPU. Fail early with a useful message instead of an opaque 503.
+    if largest > available * 0.75:
+        raise LocalModelNotReadyError(
+            "The configured local Gemma model is too large for the currently available RAM. "
+            f"Largest safetensors shard: {largest / (1024 ** 3):.1f} GB; "
+            f"available physical RAM: {available / (1024 ** 3):.1f} GB. "
+            "Use hosted Demo mode for the competition path, switch Local to a smaller/quantized Gemma 4 model, "
+            "or close apps/increase RAM/pagefile and restart the local runner."
+        )
 
 
 def _raise_unavailable() -> None:
@@ -125,6 +183,7 @@ def _load_model(model_name: str):
         try:
             _raise_unavailable()
             model_ref = _model_ref(model_name)
+            _preflight_model_files(model_ref)
             _processor = AutoProcessor.from_pretrained(model_ref, padding_side="left", use_fast=True)
             load_kwargs: dict[str, Any] = {
                 "dtype": torch.bfloat16 if torch.cuda.is_available() else "auto",

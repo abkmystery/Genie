@@ -19,6 +19,7 @@ _build_gemma_messages = runner_app._build_gemma_messages
 _dependency_status = runner_app._dependency_status
 _generate = runner_app._generate
 _move_inputs_to_device = runner_app._move_inputs_to_device
+_preflight_model_files = runner_app._preflight_model_files
 app = runner_app.app
 
 
@@ -143,3 +144,24 @@ def test_generate_retries_without_static_cache():
     assert output == ["ok"]
     assert "cache_implementation" in model.calls[0]
     assert "cache_implementation" not in model.calls[1]
+
+
+def test_preflight_rejects_single_shard_model_when_ram_is_too_low(tmp_path, monkeypatch):
+    shard = tmp_path / "model.safetensors"
+    shard.write_bytes(b"x" * 1024)
+    monkeypatch.setattr(runner_app, "_available_memory_bytes", lambda: 1024)
+
+    class _Torch:
+        class cuda:
+            @staticmethod
+            def is_available():
+                return False
+
+    monkeypatch.setattr(runner_app, "torch", _Torch)
+
+    try:
+        _preflight_model_files(str(tmp_path))
+    except runner_app.LocalModelNotReadyError as exc:
+        assert "too large" in str(exc)
+    else:
+        raise AssertionError("Expected LocalModelNotReadyError")
