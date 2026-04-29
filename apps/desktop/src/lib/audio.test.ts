@@ -11,4 +11,10 @@ describe("audio helpers", () => {
   it("removes markdown markers before TTS", () => {
     expect(sanitizeSpeechText("**Step 1:** *Open* Kaggle")).toBe("Step 1: Open Kaggle");
   });
+
+  it("turns latex formulas into speakable plain language", () => {
+    expect(sanitizeSpeechText("$$\\tan \\alpha = \\frac{\\sin \\alpha}{\\cos \\alpha}$$")).toBe(
+      "tangent alpha equals sine alpha divided by cosine alpha",
+    );
+  });
 });

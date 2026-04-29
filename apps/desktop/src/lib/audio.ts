@@ -53,7 +53,7 @@ export function looksLikeBase64Audio(value: string): boolean {
 }
 
 export function sanitizeSpeechText(value: string): string {
-  return value
+  return replaceLatexForSpeech(value)
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
@@ -63,6 +63,50 @@ export function sanitizeSpeechText(value: string): string {
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
     .replace(/^\s*[-*]\s+/gm, "")
     .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function replaceLatexForSpeech(value: string): string {
+  return value
+    .replace(/\$\$([\s\S]*?)\$\$/g, (_match, formula: string) => plainMathForSpeech(formula))
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_match, formula: string) => plainMathForSpeech(formula))
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_match, formula: string) => plainMathForSpeech(formula))
+    .replace(/\$([\s\S]*?)\$/g, (_match, formula: string) => plainMathForSpeech(formula));
+}
+
+function plainMathForSpeech(value: string): string {
+  let text = value.trim();
+  text = text.replace(/\\text\{([^{}]+)\}/g, "$1");
+  for (let index = 0; index < 4; index += 1) {
+    const next = text.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, "$1 divided by $2");
+    if (next === text) break;
+    text = next;
+  }
+  const words: Array<[RegExp, string]> = [
+    [/\\sin\b/g, "sine"],
+    [/\\cos\b/g, "cosine"],
+    [/\\tan\b/g, "tangent"],
+    [/\\cot\b/g, "cotangent"],
+    [/\\sec\b/g, "secant"],
+    [/\\csc\b/g, "cosecant"],
+    [/\\alpha\b/g, "alpha"],
+    [/\\beta\b/g, "beta"],
+    [/\\gamma\b/g, "gamma"],
+    [/\\theta\b/g, "theta"],
+    [/\\pi\b/g, "pi"],
+  ];
+  for (const [pattern, replacement] of words) {
+    text = text.replace(pattern, replacement);
+  }
+  return text
+    .replace(/\\cdot|\\times/g, " times ")
+    .replace(/\\over/g, " divided by ")
+    .replace(/\\/g, "")
+    .replace(/\^/g, " to the power of ")
+    .replace(/_/g, " ")
+    .replace(/=/g, " equals ")
+    .replace(/\//g, " divided by ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
