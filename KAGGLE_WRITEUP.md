@@ -8,17 +8,13 @@ Genie: A Privacy-First Digital Access Companion Powered by Gemma 4
 
 A desktop AI companion that sees the current screen, grounds answers in private files, and guides users through complex digital workflows without taking control.
 
-## Selected Track
-
-Impact Track - Digital Equity
-
 ## Writeup
 
 Many people do not fail at digital tasks because they lack intelligence. They fail because modern websites, portals, forms, dashboards, school systems, healthcare pages, job applications, and government services assume too much context. A user may not know what a page is asking, which field matters, whether a document contains the needed answer, or where to click next. Genie was built for that gap: a privacy-first desktop companion that helps users understand and complete digital workflows safely.
 
 Genie is not another chatbot in a window. It is an always-available screen companion. The user can ask about what is currently visible, attach private files, select a region of the screen, record a short activity session, or ask Genie to guide them step by step. Genie answers with citations and debug traces, and in Guided Task mode it points with an on-screen arrow while leaving every click and decision to the user.
 
-### Why This Fits Digital Equity
+### Why This Fits Digital Equity & Inclusivity, and Future of Education
 
 Digital access is no longer only about having an internet connection. It is about being able to navigate systems that are dense, high-stakes, and often unforgiving. Genie is designed for students filling out education portals, job seekers reading application forms, caregivers navigating benefits pages, and anyone who needs plain-language help on the screen in front of them.
 
