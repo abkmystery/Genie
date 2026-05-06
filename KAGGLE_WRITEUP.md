@@ -97,5 +97,5 @@ Genie demonstrates a practical Gemma 4 application for digital equity: a compani
 
 - Public video: https://youtu.be/WFLS7RgKG1A
 - Public code repository: `https://github.com/abkmystery/Genie`
-- Live demo/prototype: Download attached installer, give it a minute to get setup and then run in demo mode.
+- Live demo/prototype: Download attached installer through kaggle dataset - https://www.kaggle.com/datasets/abkmystery/genie-installer, give it a minute to get setup and then run in demo mode.
 - Media gallery: Relevant Images and Video are attached
