@@ -10,7 +10,7 @@
 
 ## Safe To Ship Publicly
 
-- `apps/desktop` source and packaged client binaries.
+- `apps/desktop` source.
 - `services/local-api` source.
 - `services/demo-gateway` scaffold and `.env.example`.
 - `config/profiles/*.json` public config files.
@@ -41,3 +41,9 @@ Genie will not display the raw key in the UI, Settings, logs, or the debug panel
 If someone extracts the packaged file later, that is acceptable for this demo.
 
 Details: see `docs/demo-credential-file.md`.
+
+## Public Repository Notes
+
+The public source repository must not contain private demo installers, model weights, databases, captures, logs, or local scratch files. The previous scratch Word document was removed from git history before publication because it contained local setup notes. Keep future demo credentials in ignored files only.
+
+See `docs/public-repository-checklist.md` for the publication checklist.

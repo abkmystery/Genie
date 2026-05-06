@@ -41,6 +41,8 @@ class DemoResolverResult:
 
 
 def _decode_api_key(payload: DemoProviderFile) -> str | None:
+    # Demo credential obfuscation is intentionally lightweight. It prevents
+    # accidental display in UI/logs, but it is not a security boundary.
     if payload.api_key_b64:
         try:
             return base64.b64decode(payload.api_key_b64.encode("utf-8")).decode("utf-8").strip() or None
@@ -74,6 +76,10 @@ class DemoCredentialResolver:
     1) bundled local file
     2) optional remote single-file URL
     3) offline/mock fallback
+
+    This class is the trust-boundary adapter for competition demo builds:
+    public source ships only the example template, while private local demo
+    builds may provide the ignored file at resources/private/demo-provider.json.
     """
 
     def __init__(self, *, resources_dir: Path, bundled_relative_path: str = "private/demo-provider.json") -> None:

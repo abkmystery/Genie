@@ -196,6 +196,16 @@ class OpenAICompatibleHttpModelProvider(ModelProvider):
 
 
 class DemoModelProvider(ModelProvider):
+    """
+    Demo-mode Gemma provider.
+
+    The desktop app never receives the demo key. The local API resolves a
+    private demo config through DemoCredentialResolver, builds the same
+    OpenAI-compatible multimodal payload used by Local/Custom providers, and
+    sends it to the configured Gemma 4 endpoint. If no private config exists
+    in a public build, this provider returns an explicit offline fallback.
+    """
+
     def __init__(self, *, resolve_demo_config) -> None:
         self._resolve_demo_config = resolve_demo_config
 
@@ -213,6 +223,8 @@ class DemoModelProvider(ModelProvider):
         resolved = await self._resolve_demo_config(profile)
         status = resolved.status
         if not resolved.api_key:
+            # Public source/builds intentionally land here unless the user
+            # supplies a private demo credential file outside git.
             return GatewayChatResponse(
                 answer=fallback_grounded_answer(prompt, evidence, screen_context, region_context),
                 provider_used="demo:offline-mock",

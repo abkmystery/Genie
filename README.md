@@ -1,153 +1,178 @@
 # Genie
 
-Genie is a privacy-first desktop AI companion built to feel genuinely useful in the real world, not just impressive in a demo. It stays available as an on-screen companion, understands what the user is looking at, grounds answers in local files and live screen context, and can guide a user step by step with on-screen overlays.
+Genie is a privacy-first desktop AI companion built for the Kaggle Gemma 4 Good Hackathon. It helps people understand complex websites, forms, portals, and workflows by seeing the current screen, grounding answers in local files, and guiding the next step with human-in-the-loop overlays.
 
-This repository is being shaped as a strong submission for the Kaggle Gemma 4 Good Hackathon. The product direction intentionally matches the themes highlighted by Google and Kaggle around local-first AI, multimodal utility, privacy, trust, and meaningful real-world impact. Official context:
+The core product idea is simple: Genie does not take over the computer. It explains, cites, points, and waits for the user to stay in control.
 
-- [Gemma 4: Byte for byte, the most capable open models](https://blog.google/innovation-and-ai/technology/developers-tools/gemma-4/)
-- [The Gemma 4 Good Hackathon on Kaggle](https://www.kaggle.com/competitions/gemma-4-good-hackathon/overview)
+## Competition Positioning
 
-This repo is intentionally split into a few replaceable parts:
+Genie is designed for Digital Equity, Future of Education, and Safety & Trust use cases:
 
-- `apps/desktop`: Electron + React desktop shell and overlay UI.
-- `services/local-api`: FastAPI orchestration layer that owns profiles, ingestion, retrieval, chat, screen context, and trace generation.
-- `services/demo-gateway`: deployable demo-mode gateway scaffold with no embedded secrets.
-- `packages/contracts`: shared TypeScript contracts and JSON schemas used by the desktop app and docs.
-- `config/profiles`: public profile definitions for `demo`, `local`, and `custom`.
+- It helps users complete real digital tasks instead of chatting in isolation.
+- It uses Gemma 4 for multimodal screen and document reasoning.
+- It keeps private files local to the desktop orchestration layer.
+- It supports an optional local Gemma 4 runner for edge-style experimentation.
+- It avoids autonomous clicking, typing, form submission, file mutation, and hidden background control.
 
-## Why Genie Is Competitive
+## What Genie Does
 
-Genie is designed to score well on the things that usually separate winning hackathon submissions from generic assistants:
+- Opens as a one-click Windows desktop companion with a draggable launcher and resizable panel.
+- Answers questions about the current screen and selected screen regions.
+- Ingests local files and cites evidence in answers.
+- Supports `.txt`, `.md`, `.csv`, `.xlsx`, `.pdf`, `.docx`, `.png`, `.jpg`, `.jpeg`, and `.webp`.
+- Provides Guided Task mode with step cards and visible arrow/highlight overlays.
+- Records short explicit screen-tracking sessions and summarizes only actions taken after recording starts.
+- Supports Demo, Local, and Custom provider profiles without source-code edits.
+- Shows provider status, citations, and debug traces so judges can verify live model behavior.
 
-- Real utility: it helps a user understand the screen they are already on, not a disconnected toy workflow.
-- Strong Gemma 4 fit: demo mode uses hosted Gemma 4, and local mode supports edge-friendly Gemma 4 E4B/E2B through an OpenAI-compatible runner.
-- Privacy-first UX: local API boundary, local file grounding, and local model support reduce unnecessary data exposure.
-- Multimodal grounding: answers and guidance use screenshots, selected regions, OCR, attachments, and structured evidence.
-- Polished user experience: launcher, drawer UI, citations, debug panel, settings, activity tracking, and guided overlays.
-- Honest behavior: Genie does not pretend it tracked history or found a target when the evidence is weak.
+## How Gemma 4 Is Implemented
 
-## Core Features
+Genie keeps Gemma 4 behind provider interfaces so Demo, Local, and Custom modes are swappable.
 
-- Bottom-right Genie launcher and expandable panel.
-- Text chat, mic button, optional spoken response flow.
-- Current-screen capture and drag-to-select region flow.
-- Guided Task mode with step cards, on-screen arrow guidance, conservative progress detection, and manual fallback controls.
-- Source ingestion for `txt`, `md`, `pdf`, `docx`, `csv`, `xlsx`, `png`, `jpg`, `jpeg`, `webp`.
-- Grounded answers using screen context, region context, and ingested sources.
-- Structured evidence and developer-facing trace/debug details.
-- Profile system with `demo`, `local`, and `custom`.
-- Secure credential abstraction with an OS-keyring attempt and a loud dev fallback.
-- Demo gateway scaffold with no server-side secrets committed.
+Primary code paths:
 
-## Gemma 4 Alignment
+- `services/local-api/app/providers/model_provider.py`
+  - `DemoModelProvider` calls Google-hosted Gemma 4 through the Gemini OpenAI-compatible `/chat/completions` API when a private demo credential is present.
+  - `OpenAICompatibleHttpModelProvider` routes Local and Custom profiles to any compatible endpoint.
+- `services/local-api/app/providers/model_payloads.py`
+  - Builds OpenAI-style multimodal chat messages with text plus `image_url` data URLs for screen and region analysis.
+- `services/local-api/app/providers/demo_credentials.py`
+  - Resolves Demo credentials from a bundled private demo file, optional remote single-file config, or offline fallback.
+- `services/local-gemma-runner/app.py`
+  - Experimental local Gemma 4 runner exposing `/v1/chat/completions`, `/ready`, `/warmup`, and diagnostics.
+- `services/local-api/app/domain/answer_service.py`
+  - Orchestrates retrieval, screen context, web search opt-in behavior, guidance intent, activity summaries, provider calls, citations, and traces.
+- `services/local-api/app/domain/guidance_orchestrator.py`
+  - Coordinates task planning, screen grounding, progress checks, and safe fallback behavior for Guided Task mode.
 
-Genie is intentionally aligned with the strengths Google called out for Gemma 4:
+More detail: [docs/gemma-4-implementation.md](docs/gemma-4-implementation.md).
 
-- Multimodal reasoning over screen images and documents.
-- Native edge-model audio support for E2B/E4B in Local mode.
-- Local-first deployment paths for privacy-sensitive or low-connectivity environments.
-- Agentic-style step guidance without unsafe autonomous control.
+## Architecture
 
-Current recommended profiles:
+```text
+apps/desktop
+  Electron + React UI, launcher, chat panel, settings, overlays
 
-- `demo`: hosted Gemma 4 for the smoothest public demo path
-- `local`: Gemma 4 E4B through the local runner path for edge-style local testing, with E2B as the lower-memory fallback
-- `custom`: any compatible endpoint for experimentation or later production routing
+services/local-api
+  FastAPI local orchestration boundary used by the desktop app
 
-## Guided Task Mode
+services/demo-gateway
+  Optional private-hosting scaffold for a server-side Gemma gateway
 
-Genie can now switch from answer mode into Guided Task mode when the user asks for help step by step, for example:
+services/local-gemma-runner
+  Experimental local Gemma 4 OpenAI-compatible runner
 
-- `Guide me through this`
-- `Show me where to click`
-- `Walk me through this form`
+packages/contracts
+  Shared TypeScript contracts and JSON schemas
 
-When guidance starts, Genie:
+config/profiles
+  Public profile metadata for demo, local, and custom modes
+```
 
-1. builds a short task plan,
-2. grounds the current step on the live screen,
-3. renders an overlay arrow or highlight,
-4. waits for confirmation or a conservative completion signal,
-5. advances one step at a time.
-
-If grounding fails, Genie falls back safely with `Re-scan`, `I can't find it`, and text-only recovery options.
-
-## What Makes Genie Useful
-
-Genie is not just “chat with screenshots.” It combines several things users actually need in one companion:
-
-- Ask what a page means or what action is being requested.
-- Attach private files and get grounded answers with citations.
-- Select a region to focus the model on exactly the right area.
-- Track a short window of activity and summarize the steps.
-- Ask Genie to guide the next click with an on-screen arrow instead of only returning text.
+The desktop UI talks only to `services/local-api`. Provider keys and endpoint routing are owned by the local API or private gateway paths, not by React components.
 
 ## Quick Start
 
-1. Install Node dependencies:
+Install dependencies:
 
 ```powershell
 npm.cmd install
-```
-
-2. Install Python dependencies:
-
-```powershell
 py -3.11 -m pip install -r services/local-api/requirements.txt
 py -3.11 -m pip install -r services/demo-gateway/requirements.txt
 ```
 
-3. Start the desktop app (it will start the local API automatically if needed):
+Run desktop development mode:
 
 ```powershell
-npm.cmd run dev --workspace @genie/desktop
+npm.cmd run dev:desktop
 ```
 
-If PowerShell blocks `npm.ps1`, always use `npm.cmd`.
+The Electron app starts the local API automatically in normal desktop flows. If PowerShell blocks `npm.ps1`, use `npm.cmd`.
 
-## Commands
+## Demo Mode
 
-- Desktop dev: `npm.cmd run dev --workspace @genie/desktop`
-- Desktop tests: `npm.cmd run test --workspace @genie/desktop`
-- Desktop typecheck: `npm.cmd run typecheck --workspace @genie/desktop`
-- Contracts build: `npm.cmd run build --workspace @genie/contracts`
-- Backend tests: `py -3.11 -m pytest services/local-api/tests && py -3.11 -m pytest services/demo-gateway/tests`
-- Local Gemma 4 setup: `npm.cmd run setup:local-gemma`
-- Local Gemma 4 runner: `npm.cmd run dev:local-gemma`
-- Guidance eval: `npm.cmd run eval:guidance`
-- Package audit: `npm.cmd run audit:package`
-- Public package: `npm.cmd run package:public`
-- Private demo package: `npm.cmd run package:demo`
-- Root build: `npm.cmd run build`
+Public source contains no real demo credential. Demo mode resolves in this order:
 
-## Profiles
+1. `resources/private/demo-provider.json` if present in a private local build.
+2. Optional remote single-file config if configured.
+3. Offline/mock fallback.
 
-- `demo`: uses bundled/remote demo credential file when available, otherwise offline fallback.
-- `local`: user enters endpoint + optional token + model in the setup wizard or Settings. The recommended endpoint is `http://127.0.0.1:8766/v1`; the recommended local model is `google/gemma-4-E4B-it`.
-- `custom`: user enters endpoint + optional token + model in the setup wizard or Settings; nothing requires a source edit.
+The public repository includes only:
 
-For local Gemma 4, see [docs/local-gemma.md](docs/local-gemma.md). The runner verifies `AutoModelForMultimodalLM` before startup because older Transformers installs can expose `/v1/models` but still fail on audio/image chat requests.
+- `resources/private/demo-provider.example.json`
+- documentation for private demo builds
+- audit scripts that fail public packages containing unsafe artifacts
 
-Profile precedence on startup:
+For a competition recording, a private local `package:demo` build can include `resources/private/demo-provider.json`. Do not commit that file.
 
-1. `--profile=demo|local|custom` passed to the desktop app.
-2. Persisted setting from the local API storage layer.
-3. Default fallback: `demo`.
+## Local Gemma 4
 
-## Security
+Local mode targets an OpenAI-compatible endpoint such as:
 
-- No real provider secrets are committed or bundled.
-- The desktop app talks only to the local API.
-- Custom credentials are stored behind a `SecureCredentialStore` abstraction.
-- If OS-backed secure storage is unavailable, Genie falls back to a clearly marked development-only local file store and shows a warning in Settings.
+```text
+http://127.0.0.1:8766/v1
+```
 
-More detail lives in [docs/security.md](docs/security.md) and [docs/release.md](docs/release.md).
+Setup:
 
-## Submission Positioning
+```powershell
+npm.cmd run setup:local-gemma
+npm.cmd run dev:local-gemma
+```
 
-If you are packaging Genie as a Gemma 4 Good submission, the strongest story is:
+Notes:
 
-- Genie helps people complete real digital tasks with less confusion and less risk.
-- It works in privacy-sensitive settings because the desktop app talks to a local orchestration layer and can run with local models.
-- It uses Gemma 4 where Gemma is strongest: multimodal reasoning, grounded help, local/edge deployment options, and practical human-in-the-loop guidance.
-- It focuses on trust and usability instead of pretending to be fully autonomous.
+- `google/gemma-4-E4B-it` is the local quality target.
+- 16 GB RAM laptops may need a smaller or quantized model.
+- Hosted Demo mode is the recommended reliable judge path.
+
+Details: [docs/local-gemma.md](docs/local-gemma.md).
+
+## Validation Commands
+
+```powershell
+npm.cmd run test:backend
+npm.cmd run test:desktop
+npm.cmd run typecheck:desktop
+npm.cmd run eval:guidance
+npm.cmd run audit:package
+```
+
+Packaging:
+
+```powershell
+npm.cmd run package:public
+npm.cmd run package:demo
+```
+
+Use `package:public` for public artifacts. Use `package:demo` only for private demo builds where a local ignored demo credential file is intentionally bundled.
+
+## Public Repository Safety
+
+This repo is prepared to be public:
+
+- Real provider keys are not tracked.
+- The previous local scratch Word document was removed from git history before publication.
+- `resources/private/demo-provider.json` and `resources/private/demo-provider.json.txt` are ignored.
+- Model weights, release artifacts, local databases, captures, reports, logs, caches, and private env files are ignored.
+- Public builds must pass `npm.cmd run audit:package`.
+
+See [docs/security.md](docs/security.md) and [docs/public-repository-checklist.md](docs/public-repository-checklist.md).
+
+## Submission Resources
+
+- [SUBMISSION.md](SUBMISSION.md)
+- [docs/judge-quickstart.md](docs/judge-quickstart.md)
+- [docs/demo-script.md](docs/demo-script.md)
+- [docs/validation-report.md](docs/validation-report.md)
+- [docs/gemma-4-implementation.md](docs/gemma-4-implementation.md)
+
+## What Genie Does Not Do
+
+- No autonomous clicking or typing.
+- No form submission on behalf of the user.
+- No shell/file/email mutation tools.
+- No hidden passive monitoring.
+- No committed provider credentials.
+
+That boundary is intentional: Genie is a trustworthy companion that guides the user, not an unsafe remote-control agent.

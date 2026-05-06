@@ -35,3 +35,8 @@ resources/backend/pyinstaller-work/
 resources/backend/pyinstaller-spec/
 .tmp_backend_data/
 .tmp_backend_logs/
+
+# Local scratch/demo files used during development; keep public repo clean.
+/App runs steps.docx
+/Test excel source.xlsx
+/Test text source.txt

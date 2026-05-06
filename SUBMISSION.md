@@ -1,33 +1,62 @@
 # Genie Submission Brief
 
-Genie is a privacy-first digital access companion for people who need help understanding complex websites, forms, portals, and workflows. It uses Gemma 4 for screen reasoning, private-file grounding, and human-in-the-loop guidance without taking autonomous control of the computer.
+Genie is a privacy-first digital access companion powered by Gemma 4. It helps users understand complex screens, use private documents as context, and move through digital workflows with visible guidance while keeping the user in control.
 
-## Competition Story
+## Public Source Of Truth
 
-- Category fit: Digital Equity, Future of Education, Safety and Trust.
-- Core promise: Genie helps users complete digital tasks safely and independently by seeing the screen, explaining what matters, citing private files, and pointing to the next step.
-- Safety boundary: Genie guides with overlays and instructions only. It does not click, type, submit forms, run shell commands, send emails, mutate files, or bypass user control.
+Repository:
+
+```text
+https://github.com/abkmystery/Genie
+```
+
+The repository is intended to be public for judging. It contains the desktop app, local orchestration API, demo gateway scaffold, local Gemma runner, contracts, tests, validation scripts, and documentation. It does not contain real provider credentials or model weights.
+
+## Gemma 4 Usage
+
+Genie uses Gemma 4 through two explicit paths:
+
+1. **Demo path**
+   - Desktop app calls `services/local-api`.
+   - `services/local-api` resolves Demo provider config.
+   - In a private demo build, the local API calls Google-hosted Gemma 4 via the Gemini OpenAI-compatible `/chat/completions` API.
+   - Public source includes only the example credential template and offline fallback.
+
+2. **Local path**
+   - Desktop app calls `services/local-api`.
+   - Local profile points to an OpenAI-compatible endpoint such as `http://127.0.0.1:8766/v1`.
+   - `services/local-gemma-runner` exposes an experimental Gemma 4 local endpoint using Hugging Face `AutoModelForMultimodalLM`.
+
+Gemma 4 is used for:
+
+- Current-screen understanding.
+- Selected-region understanding.
+- File-grounded answers with citations.
+- Guided Task planning and target grounding.
+- Activity recording summaries from sampled screen timelines.
 
 ## Judge-Visible Flows
 
 1. Ask about the current screen and receive a concise Gemma-grounded answer.
-2. Attach or ingest a private file and receive citations from local sources.
-3. Ask "Guide me through..." and see on-screen arrows with conservative step advancement.
-4. Switch between Demo hosted Gemma and Local Gemma endpoint modes from Settings.
+2. Attach or ingest a local file and receive citations from private sources.
+3. Ask `Guide me through...` and see on-screen guidance overlays.
+4. Start `Track Screen`, perform actions, and receive an action-only step summary.
+5. Open Settings or Debug and verify provider status such as `Live Gemma`, `Offline fallback`, or `Local model not ready`.
 
-## Gemma 4 Usage
+## Safety Boundary
 
-- Demo path: desktop -> local-api -> demo-gateway -> Google Gemini OpenAI-compatible Gemma 4 endpoint.
-- Local path: desktop -> local-api -> local OpenAI-compatible Gemma runner.
-- Gemma handles text + image reasoning for screen understanding, region understanding, guidance grounding, and activity summaries.
-- Audio remains explicit: browser/local STT transcribes speech first unless a selected local endpoint truly supports audio-native messages.
+Genie is human-in-the-loop guidance, not autonomous computer use. It does not click, type, submit forms, mutate files, run shell commands, send emails, or bypass user control.
 
-## Reliability Gates
+## Validation Gates
 
-- `npm.cmd run test:backend`
-- `npm.cmd run test:desktop`
-- `npm.cmd run typecheck:desktop`
-- `npm.cmd run eval:guidance`
-- `npm.cmd run audit:package`
+Run before submission:
 
-Final demo recordings should show "Live Gemma" in Settings or Debug. Fallback/mock responses are acceptable only when intentionally demonstrating offline resilience.
+```powershell
+npm.cmd run test:backend
+npm.cmd run test:desktop
+npm.cmd run typecheck:desktop
+npm.cmd run eval:guidance
+npm.cmd run audit:package
+```
+
+Final video recordings should show live provider status. Fallback/mock responses are acceptable only when intentionally demonstrating offline resilience.
