@@ -47,16 +47,4 @@ Gemma 4 is used for:
 
 Genie is human-in-the-loop guidance, not autonomous computer use. It does not click, type, submit forms, mutate files, run shell commands, send emails, or bypass user control.
 
-## Validation Gates
 
-Run before submission:
-
-```powershell
-npm.cmd run test:backend
-npm.cmd run test:desktop
-npm.cmd run typecheck:desktop
-npm.cmd run eval:guidance
-npm.cmd run audit:package
-```
-
-Final video recordings should show live provider status. Fallback/mock responses are acceptable only when intentionally demonstrating offline resilience.
