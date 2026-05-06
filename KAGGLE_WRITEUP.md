@@ -1,4 +1,4 @@
-# Kaggle Writeup Draft
+# Kaggle Writeup
 
 ## Title
 
@@ -97,9 +97,9 @@ The public repository contains no real provider keys, no model weights, no local
 
 Genie demonstrates a practical Gemma 4 application for digital equity: a companion that sees the screen, understands private context, explains in plain language, and guides the next step without taking control. The result is not just a chatbot. It is a safer interaction pattern for AI on the desktop: grounded, inspectable, human-in-the-loop, and useful for the real digital tasks people struggle with every day.
 
-## Assets To Attach
+## Assets 
 
-- Public video: paste the YouTube link to your recorded demo.
+- Public video: https://youtu.be/WFLS7RgKG1A
 - Public code repository: `https://github.com/abkmystery/Genie`
-- Live demo/prototype: attach or link the Windows installer/private demo artifact.
-- Media gallery: attach the product poster/screenshot plus 2-3 app screenshots showing screen understanding, source citations, and guided overlay.
+- Live demo/prototype: Download attached installer, give it a minute to get setup and then run in demo mode.
+- Media gallery: Relevant Images and Video are attached
