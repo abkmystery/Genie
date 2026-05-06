@@ -87,7 +87,7 @@ Before submission we ran:
 - Guidance eval with 20/20 target cases passing.
 - Package audit for unsafe artifacts.
 
-The public repository contains no real provider keys, no model weights, no local databases, no screen captures, and no release bundles. The private demo build can include a local ignored demo credential file, but that file is not committed.
+The public repository contains no real provider keys, no model weights, no local databases, no screen captures, and no release bundles. 
 
 ### Conclusion
 
